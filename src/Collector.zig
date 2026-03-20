@@ -17,6 +17,19 @@ pub const VTable = struct {
     deinit: *const fn (*anyopaque) void,
 };
 
+pub fn init(ptr: anytype) Collector {
+    const impl = Delegate(ptr);
+    return .{
+      .ptr = ptr,
+      .vtable = &.{
+        .collect = impl.collect,
+        .write = impl.write,
+        .reset = impl.reset,
+        .deinit = impl.deinit,
+      },
+    };
+}
+
 pub fn collect(self: Collector, allocator: std.mem.Allocator) anyerror!void {
     try self.vtable.collect(self.ptr, allocator);
 }
@@ -33,63 +46,44 @@ pub fn deinit(self: Collector) void {
     self.vtable.deinit(self.ptr);
 }
 
-fn noop(self: *anyopaque) void {
-    _ = self;
+fn CastPtr(comptime T: type, ptr: *anyopaque) *T {
+    return @as(*T, @ptrCast(@alignCast(ptr)));
 }
 
-pub fn init(ptr: anytype) Collector {
-    const T = @TypeOf(ptr);
-    const ptr_info = @typeInfo(T);
+inline fn Delegate(ptr: anytype) type {
+    const T = @TypeOf(ptr.*);
 
-    const gen = struct {
-      pub fn collect(pointer: *anyopaque, allocator: std.mem.Allocator) anyerror!void {
-        const self: T = @ptrCast(@alignCast(pointer));
-        return ptr_info.@"pointer".child.collect(self, allocator);
-      }
+    if (!@hasDecl(T, "collect")) {
+        @compileError("You must implement a 'collect' method on Type: " ++ @typeName(T));
+    }
 
-      pub fn write(pointer: *anyopaque, writer: *std.Io.Writer) anyerror!void {
-        const self: T = @ptrCast(@alignCast(pointer));
-        return ptr_info.@"pointer".child.write(self, writer);
-      }
+    return struct {
+        pub fn collect(pointer: *anyopaque, allocator: std.mem.Allocator) anyerror!void {
+            try CastPtr(T, pointer).collect(allocator);
+        }
 
-      pub fn reset(pointer: *anyopaque ) void {
-        const self: T = @ptrCast(@alignCast(pointer));
-        ptr_info.@"pointer".child.reset(self);
-      }
+        pub fn write(pointer: *anyopaque, writer: *std.Io.Writer) anyerror!void {
+            const self: *T = CastPtr(T, pointer);
+            switch (@hasDecl(T, "write")) {
+                true => try self.write(writer),
+                false => try m.write(self, writer),
+            }
+        }
 
-      pub fn deinit(pointer: *anyopaque ) void {
-        const self: T = @ptrCast(@alignCast(pointer));
-        ptr_info.@"pointer".child.deinit(self);
-      }
+        pub fn reset(pointer: *anyopaque ) void {
+            switch (@hasDecl(T, "reset")) {
+                true => CastPtr(T, pointer).reset(),
+                false => {},
+            }
+        }
 
-      pub fn defaultDeinit(pointer: *anyopaque ) void {
-        const self: T = @ptrCast(@alignCast(pointer));
-        utils.deinit(self);
-      }
-
-      pub fn defaultWrite(pointer: *anyopaque, writer: *std.Io.Writer) anyerror!void {
-        const self: T = @ptrCast(@alignCast(pointer));
-        return m.write(self, writer);
-      }
-
-    };
-
-    return .{
-      .ptr = ptr,
-      .vtable = &.{
-        .collect = gen.collect,
-        .write = switch (@hasDecl(ptr_info.@"pointer".child, "write")) {
-            true => gen.write,
-            false => gen.defaultWrite,
-        },
-        .reset = switch (@hasDecl(ptr_info.@"pointer".child, "reset")) {
-            true => gen.reset,
-            false => noop,
-        },
-        .deinit = switch (@hasDecl(ptr_info.@"pointer".child, "deinit")) {
-            true => gen.deinit,
-            false => gen.defaultDeinit,
-        },
-      },
+        pub fn deinit(pointer: *anyopaque ) void {
+            const self: *T = CastPtr(T, pointer);
+            switch (@hasDecl(T, "deinit")) {
+                true => self.deinit(),
+                false => utils.deinit(self),
+            }
+        }
     };
 }
+
