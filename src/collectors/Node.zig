@@ -8,7 +8,6 @@ const utils = @import("../util.zig");
 const Allocator = std.mem.Allocator;
 const Node = @This();
 
-
 states: States,
 load: Load,
 cpus: CPUs,
