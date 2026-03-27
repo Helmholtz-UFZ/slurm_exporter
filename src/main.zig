@@ -4,7 +4,6 @@
 const std = @import("std");
 const slurm = @import("slurm");
 const collectors = @import("collectors.zig");
-const node =  @import("node.zig");
 const queue =  @import("queue.zig");
 const shares =  @import("shares.zig");
 const cli = @import("cli");
@@ -73,7 +72,7 @@ fn run() !void {
     registry = .init(rt.allocator);
     defer registry.deinit();
 
-    if (shouldEnableCollector("node")) try registry.register(node.Metrics);
+    if (shouldEnableCollector("node")) try registry.register(collectors.Node);
     if (shouldEnableCollector("controller")) try registry.register(collectors.Controller);
     if (shouldEnableCollector("queue")) try registry.register(queue.Metrics);
     if (shouldEnableCollector("share")) try registry.register(shares.Metrics);
