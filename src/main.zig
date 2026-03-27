@@ -3,7 +3,7 @@
 
 const std = @import("std");
 const slurm = @import("slurm");
-const controller =  @import("controller.zig");
+const collectors = @import("collectors.zig");
 const node =  @import("node.zig");
 const queue =  @import("queue.zig");
 const shares =  @import("shares.zig");
@@ -66,11 +66,15 @@ pub fn shouldEnableCollector(name: []const u8) bool {
 }
 
 fn run() !void {
+//  var buffer: [1024]u8 = undefined;
+//  var stdout = std.fs.File.stdout().writerStreaming(&buffer);
+//  try stdout.interface.flush();
+
     registry = .init(rt.allocator);
     defer registry.deinit();
 
     if (shouldEnableCollector("node")) try registry.register(node.Metrics);
-    if (shouldEnableCollector("controller")) try registry.register(controller.Metrics);
+    if (shouldEnableCollector("controller")) try registry.register(collectors.Controller);
     if (shouldEnableCollector("queue")) try registry.register(queue.Metrics);
     if (shouldEnableCollector("share")) try registry.register(shares.Metrics);
 
