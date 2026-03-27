@@ -4,7 +4,6 @@
 const std = @import("std");
 const slurm = @import("slurm");
 const collectors = @import("collectors.zig");
-const queue =  @import("queue.zig");
 const shares =  @import("shares.zig");
 const cli = @import("cli");
 const Allocator = std.mem.Allocator;
@@ -74,7 +73,7 @@ fn run() !void {
 
     if (shouldEnableCollector("node")) try registry.register(collectors.Node);
     if (shouldEnableCollector("controller")) try registry.register(collectors.Controller);
-    if (shouldEnableCollector("queue")) try registry.register(queue.Metrics);
+    if (shouldEnableCollector("queue")) try registry.register(collectors.Queue);
     if (shouldEnableCollector("share")) try registry.register(shares.Metrics);
 
     var server = try httpz.Server(void).init(rt.allocator, .{
@@ -89,7 +88,6 @@ fn run() !void {
     router.get("/metrics", metrics, .{});
 
     try server.listen();
-
 }
 
 pub fn metrics(_: *httpz.Request, res: *httpz.Response) !void {
