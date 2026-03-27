@@ -54,6 +54,10 @@ pub fn init(allocator: Allocator, comptime opts: m.RegistryOpts) Queue {
     };
 }
 
+pub fn reset(self: *Queue) void {
+    util.reset(self);
+}
+
 pub fn collect(self: *Queue, allocator: Allocator) !void {
     var jobs = try slurm.loadJobs();
 
