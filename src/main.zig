@@ -3,7 +3,7 @@
 
 const std = @import("std");
 const slurm = @import("slurm");
-const sched =  @import("sched.zig");
+const controller =  @import("controller.zig");
 const node =  @import("node.zig");
 const queue =  @import("queue.zig");
 const shares =  @import("shares.zig");
@@ -19,7 +19,7 @@ var registry: Registry = undefined;
 pub const Runtime = struct {
     allocator: Allocator,
     cli_args: struct {
-        collectors: []const u8 = "node,sched,share,queue",
+        collectors: []const u8 = "node,controller,share,queue",
     } = .{},
 
     pub fn init(allocator: Allocator) !Runtime {
@@ -70,7 +70,7 @@ fn run() !void {
     defer registry.deinit();
 
     if (shouldEnableCollector("node")) try registry.register(node.Metrics);
-    if (shouldEnableCollector("sched")) try registry.register(sched.Metrics);
+    if (shouldEnableCollector("controller")) try registry.register(controller.Metrics);
     if (shouldEnableCollector("queue")) try registry.register(queue.Metrics);
     if (shouldEnableCollector("share")) try registry.register(shares.Metrics);
 
