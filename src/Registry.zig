@@ -20,6 +20,7 @@ pub fn init(allocator: std.mem.Allocator) Registry {
 }
 
 pub fn deinit(self: *Registry) void {
+    defer self.collectors.deinit(self.allocator);
     for (self.collectors.items) |collector| {
         collector.deinit();
     }
