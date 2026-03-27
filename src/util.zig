@@ -48,10 +48,17 @@ pub fn resetSingle(metrics: anytype) void {
     if (@hasField(T, "values")) {
         var it = metrics.impl.values.iterator();
         while (it.next()) |kv| {
-            kv.value_ptr.value = 0;
+            const InnerT = @TypeOf(kv.value_ptr.*);
+            if (@hasField(InnerT, "value")) {
+                kv.value_ptr.value = 0;
+            } else if (@hasField(InnerT, "count")) {
+                kv.value_ptr.count = 0;
+            }
         }
     } else if (@hasField(T, "value")) {
         metrics.impl.value = 0;
+    } else if (@hasField(T, "count")) {
+        metrics.impl.count = 0;
     }
 }
 
