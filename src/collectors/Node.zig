@@ -7,6 +7,7 @@ const m = @import("metrics");
 const utils = @import("../util.zig");
 const Allocator = std.mem.Allocator;
 const Node = @This();
+const mebi_to_bytes = utils.mebi_to_bytes;
 
 states: States,
 load: Load,
@@ -14,7 +15,6 @@ cpus: CPUs,
 memory: Memory,
 
 const LabelsPerHost = struct {
-    host: []const u8,
     state: []const u8,
     partition: []const u8,
 };
@@ -68,7 +68,7 @@ pub fn collect(self: *Node, allocator: Allocator) !void {
     var node_iter = node_resp.iter();
 
     while (node_iter.next()) |node| {
-        const node_name = slurm.parseCStr(node.name) orelse continue;
+        _ = slurm.parseCStr(node.name) orelse continue;
         const partitions = slurm.parseCStr(node.partitions) orelse "unknown";
         const util = node.utilization();
         const reason = slurm.parseCStr(node.reason) orelse "";
@@ -78,7 +78,6 @@ pub fn collect(self: *Node, allocator: Allocator) !void {
         var node_labels: LabelsPerHost = .{
             .state = "unknown",
             .partition = "unknown",
-            .host = node_name,
         };
 
         var state_count_labels: LabelsStateCount = .{
@@ -125,11 +124,11 @@ pub fn collect(self: *Node, allocator: Allocator) !void {
                 .idle, .allocated, .mixed => {
                     node_labels.state = "allocated";
                     try self.cpus.incrBy(node_labels, util.alloc_cpus);
-                    try self.memory.incrBy(node_labels, util.alloc_memory);
+                    try self.memory.incrBy(node_labels, util.alloc_memory * mebi_to_bytes);
 
                     node_labels.state = "idle";
                     try self.cpus.incrBy(node_labels, util.idle_cpus);
-                    try self.memory.incrBy(node_labels, util.idle_memory);
+                    try self.memory.incrBy(node_labels, util.idle_memory * mebi_to_bytes);
                 },
                 else => {},
             }
@@ -140,7 +139,7 @@ pub fn collect(self: *Node, allocator: Allocator) !void {
 
             node_labels.state = "total";
             try self.cpus.incrBy(node_labels, util.total_cpus);
-            try self.memory.incrBy(node_labels, util.real_memory);
+            try self.memory.incrBy(node_labels, util.real_memory * mebi_to_bytes);
         }
     }
 }
