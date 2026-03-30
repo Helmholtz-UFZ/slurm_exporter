@@ -4,6 +4,10 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+pub fn mebiToBytes(mebi: u64) u64 {
+    return mebi * std.math.pow(u64, 2, 20);
+}
+
 pub fn uidToName(allocator: Allocator, uid: std.posix.uid_t) ![:0]const u8 {
     //  if (job.user_name) |uname| {
     //      return std.mem.span(uname);

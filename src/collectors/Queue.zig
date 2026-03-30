@@ -7,6 +7,7 @@ const m = @import("metrics");
 const util = @import("../util.zig");
 const Allocator = std.mem.Allocator;
 const Queue = @This();
+const mebiToBytes = util.mebiToBytes;
 
 jobs: Jobs,
 cpus: CPUs,
@@ -79,7 +80,7 @@ pub fn collect(self: *Queue, allocator: Allocator) !void {
 
         try self.jobs.incr(queue_labels);
         try self.cpus.incrBy(queue_labels, cpus);
-        try self.memory.incrBy(queue_labels, job.memoryTotal());
+        try self.memory.incrBy(queue_labels, mebiToBytes(job.memoryTotal()));
 
         const tres_alloc = slurm.parseCStrZ(job.tres_alloc_str) orelse "";
         var gpu_iter = slurm.gres.GPU.iter(tres_alloc, ',');
