@@ -66,7 +66,6 @@ pub fn collect(self: *Queue, allocator: Allocator) !void {
         const uname = try util.uidToName(allocator, job.user_id);
         const partition = slurm.parseCStr(job.partition) orelse "unknown";
         const account = slurm.parseCStr(job.account) orelse "unknown";
-        const state = job.state.toStr();
         const cpus = job.num_cpus;
 
         // TODO: Optionally ignore jobs stuck in DependencyNeverSatisfied
@@ -75,7 +74,7 @@ pub fn collect(self: *Queue, allocator: Allocator) !void {
             .partition = partition,
             .account = account,
             .user = uname,
-            .state = state,
+            .state = @tagName(job.state.base),
         };
 
         try self.jobs.incr(queue_labels);
