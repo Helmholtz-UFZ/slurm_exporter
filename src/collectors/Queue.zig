@@ -59,7 +59,7 @@ pub fn reset(self: *Queue) void {
 }
 
 pub fn collect(self: *Queue, allocator: Allocator) !void {
-    var jobs = try slurm.loadJobs();
+    var jobs = try slurm.job.load();
 
     var job_iter = jobs.iter();
     while (job_iter.next()) |job| {

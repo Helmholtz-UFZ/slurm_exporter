@@ -63,7 +63,7 @@ pub fn reset(self: *Node) void {
 }
 
 pub fn collect(self: *Node, allocator: Allocator) !void {
-    var node_resp = try slurm.loadNodes();
+    var node_resp = try slurm.node.load();
     defer node_resp.deinit();
     var node_iter = node_resp.iter();
 

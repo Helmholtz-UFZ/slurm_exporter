@@ -8,6 +8,8 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const version: ?[]const u8 = b.option([]const u8, "slurm-version", "Which Version of Slurm to target") orelse null;
+
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
@@ -24,6 +26,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
         .@"use-slurmfull" = true,
+        .@"version" = version,
     });
 
     const metrics_dep = b.dependency("metrics", .{
