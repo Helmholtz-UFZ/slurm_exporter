@@ -16,6 +16,12 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const build_zig_zon = b.createModule(.{
+        .root_source_file = b.path("build.zig.zon"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const exe = b.addExecutable(.{
         .name = "slurm-exporter",
         .root_module = exe_mod,
@@ -48,6 +54,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("metrics", metrics_dep.module("metrics"));
     exe.root_module.addImport("cli", cli_dep.module("cli"));
     exe.root_module.addImport("httpz", httpz.module("httpz"));
+    exe.root_module.addImport("build.zig.zon", build_zig_zon);
 
     b.installArtifact(exe);
 
