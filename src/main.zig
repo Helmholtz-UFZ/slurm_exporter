@@ -13,15 +13,17 @@ const build_meta = @import("build.zig.zon");
 var rt: Runtime = undefined;
 var registry: Registry = undefined;
 
+const CliOptions = struct {
+    collectors: []const u8 = "node,controller,share,queue",
+    web_listen_address: []const u8 = "127.0.0.1:5882",
+    web_telemetry_path: []const u8 = "/metrics",
+    version_info: bool = false,
+    stdout: bool = false,
+};
+
 pub const Runtime = struct {
     allocator: Allocator,
-    cli_args: struct {
-        collectors: []const u8 = "node,controller,share,queue",
-        web_listen_address: []const u8 = "127.0.0.1:5882",
-        web_telemetry_path: []const u8 = "/metrics",
-        version_info: bool = false,
-        stdout: bool = false,
-    } = .{},
+    cli_args: CliOptions = .{},
 
     pub fn init(allocator: Allocator) !Runtime {
         slurm.init(null);
@@ -40,23 +42,29 @@ pub fn main() !void {
 
     var r: cli.AppRunner = try .init(rt.allocator);
 
+    const default_cli_options: CliOptions = .{};
+
     const app = cli.App{
         .command = cli.Command{
             .name = "slurm-exporter",
             .options = try r.allocOptions(&.{
                 .{
                     .long_name = "collectors.enable",
-                    .help = "Which Collectors to enable",
+                    .help =
+                        \\Which Collectors to enable
+                        \\Available:
+                        ++ " " ++ default_cli_options.collectors
+                        ,
                     .value_ref = r.mkRef(&rt.cli_args.collectors),
                 },
                 .{
                     .long_name = "web.listen-address",
-                    .help = "Host and Port to listen on",
+                    .help = "Host and Port to listen on. Default is " ++ default_cli_options.web_listen_address,
                     .value_ref = r.mkRef(&rt.cli_args.web_listen_address),
                 },
                 .{
                     .long_name = "web.telemetry-path",
-                    .help = "Path under which the metrics should be exposed",
+                    .help = "Path under which the metrics should be exposed. Default is " ++ default_cli_options.web_telemetry_path,
                     .value_ref = r.mkRef(&rt.cli_args.web_telemetry_path),
                 },
                 .{
