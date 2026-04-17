@@ -51,7 +51,7 @@ pub fn main() !void {
                 .{
                     .long_name = "collectors.enable",
                     .help =
-                        \\Which Collectors to enable
+                        \\Which Collectors to enable. All are enabled by default
                         \\Available:
                         ++ " " ++ default_cli_options.collectors
                         ,
