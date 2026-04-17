@@ -36,6 +36,8 @@ pub fn reset(self: *Shares) void {
 pub fn collect(self: *Shares, allocator: Allocator) !void {
     _ = allocator;
     var resp = try slurm.db.association.loadSharesAll();
+    defer resp.deinit();
+
     var resp_iter = try resp.iter();
     while (resp_iter.next()) |share| {
         if (share.isUserAssociation()) continue;

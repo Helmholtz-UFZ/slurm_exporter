@@ -252,6 +252,7 @@ pub fn collect(self: *Controller, allocator: Allocator) !void {
     _ = allocator;
 
     const stats = try slurm.slurmctld.loadStats();
+    defer stats.deinit();
 
     self.server_threads.incrBy(stats.server_thread_count);
     self.agent_queue_size.incrBy(stats.agent_queue_size);
