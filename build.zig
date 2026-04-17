@@ -25,7 +25,7 @@ pub fn build(b: *std.Build) void {
     const slurm_dep = b.dependency("slurm", .{
         .target = target,
         .optimize = optimize,
-        .@"use-slurmfull" = true,
+        .@"use-slurmfull" = false,
         .@"version" = version,
     });
 
