@@ -8,6 +8,7 @@ const utils = @import("../util.zig");
 const Allocator = std.mem.Allocator;
 const Node = @This();
 const mebi_to_bytes = utils.mebi_to_bytes;
+const Collector = @import("../Collector.zig");
 
 states: States,
 load: Load,
@@ -29,33 +30,34 @@ const Load = m.GaugeVec(u32, LabelsPerHost);
 const CPUs = m.GaugeVec(u32, LabelsPerHost);
 const Memory = m.GaugeVec(u128, LabelsPerHost);
 
-pub fn init(allocator: Allocator, comptime opts: m.RegistryOpts) Node {
-    return .{
+pub fn init(allocator: Allocator) !Collector {
+    const node: Node = .{
         .states = try .init(
             allocator,
-            "node_states_count",
+            "slurm_node_states_count",
             .{ .help = "State of the Nodes" },
-            opts,
+            .{},
         ),
         .load = try .init(
             allocator,
-            "node_load",
+            "slurm_node_load",
             .{ .help = "Load of the Nodes" },
-            opts,
+            .{},
         ),
         .cpus = try .init(
             allocator,
-            "node_cpus_count",
+            "slurm_node_cpus_count",
             .{ .help = "CPUs of the Nodes" },
-            opts,
+            .{},
         ),
         .memory = try .init(
             allocator,
-            "node_mem_bytes",
+            "slurm_node_mem_bytes",
             .{ .help = "Memory of the Nodes" },
-            opts,
+            .{},
         ),
     };
+    return .init(allocator, &node);
 }
 
 pub fn reset(self: *Node) void {

@@ -10,8 +10,13 @@ const opts: m.RegistryOpts = .{
     .prefix = "slurm_",
 };
 
+const Entry = struct {
+    name: []const u8,
+    init: Collector.Initializer,
+};
+
 allocator: std.mem.Allocator,
-collectors: std.ArrayList(Collector) = .empty,
+entries: std.ArrayList(Entry) = .empty,
 
 pub fn init(allocator: std.mem.Allocator) Registry {
     return .{
@@ -20,33 +25,37 @@ pub fn init(allocator: std.mem.Allocator) Registry {
 }
 
 pub fn deinit(self: *Registry) void {
-    defer self.collectors.deinit(self.allocator);
-    for (self.collectors.items) |collector| {
-        collector.deinit();
-    }
+    self.entries.deinit(self.allocator);
 }
 
 pub fn register(self: *Registry, comptime T: type) !void {
-    const ptr = try self.allocator.create(T);
-    ptr.* = .init(self.allocator, opts);
-    try self.collectors.append(self.allocator, .init(ptr));
+    const entry: Entry = .{
+        .name = @typeName(T),
+        .init = Collector.initializer(T),
+    };
+    try self.entries.append(self.allocator, entry);
 }
 
-
-pub fn reset(self: *Registry) void {
-    for (self.collectors.items) |collector| {
-        collector.reset();
+pub fn collect(self: *Registry, arena: std.mem.Allocator) !CollectionResult {
+    var result: CollectionResult = .{};
+    for (self.entries.items) |entry| {
+        const collector: Collector = try entry.init(arena);
+        try collector.collect(arena);
+        try result.append(arena, collector);
     }
+    return result;
 }
 
-pub fn collect(self: *Registry) !void {
-    for (self.collectors.items) |collector| {
-        try collector.collect(self.allocator);
-    }
-}
+pub const CollectionResult = struct {
+    inner: std.ArrayList(Collector) = .empty,
 
-pub fn write(self: *Registry, writer: *std.Io.Writer) !void {
-    for (self.collectors.items) |collector| {
-        try collector.write(writer);
+    pub fn write(self: *const CollectionResult, writer: *std.Io.Writer) !void {
+        for (self.inner.items) |collector| {
+            try collector.write(writer);
+        }
     }
-}
+
+    pub fn append(self: *CollectionResult, arena: std.mem.Allocator, item: Collector) !void {
+        return self.inner.append(arena, item);
+    }
+};

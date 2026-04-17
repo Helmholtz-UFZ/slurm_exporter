@@ -17,8 +17,13 @@ pub const VTable = struct {
     deinit: *const fn (*anyopaque) void,
 };
 
-pub fn init(ptr: anytype) Collector {
-    const impl = Delegate(ptr);
+pub fn init(allocator: std.mem.Allocator, instance: anytype) !Collector {
+    const T = @TypeOf(instance.*);
+    const impl = Delegate(T);
+
+    const ptr = try allocator.create(T);
+    ptr.* = instance.*;
+
     return .{
       .ptr = ptr,
       .vtable = &.{
@@ -28,6 +33,11 @@ pub fn init(ptr: anytype) Collector {
         .deinit = impl.deinit,
       },
     };
+}
+
+pub const Initializer = *const fn (std.mem.Allocator) anyerror!Collector;
+pub fn initializer(comptime T: type) Initializer {
+    return T.init;
 }
 
 pub fn collect(self: Collector, allocator: std.mem.Allocator) anyerror!void {
@@ -50,8 +60,7 @@ fn CastPtr(comptime T: type, ptr: *anyopaque) *T {
     return @as(*T, @ptrCast(@alignCast(ptr)));
 }
 
-inline fn Delegate(ptr: anytype) type {
-    const T = @TypeOf(ptr.*);
+inline fn Delegate(comptime T: type) type {
 
     if (!@hasDecl(T, "collect")) {
         @compileError("You must implement a 'collect' method on Type: " ++ @typeName(T));

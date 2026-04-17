@@ -90,7 +90,6 @@ fn run() !void {
 }
 
 pub fn metrics(_: *httpz.Request, res: *httpz.Response) !void {
-    registry.reset();
-    try registry.collect();
-    try registry.write(res.writer());
+    const result = try registry.collect(res.arena);
+    try result.write(res.writer());
 }
