@@ -23,7 +23,6 @@ const CliOptions = struct {
     web_telemetry_path: []const u8 = "/metrics",
     version_info: bool = false,
     stdout: bool = false,
-    debug: bool = false,
 };
 
 pub const Runtime = struct {
