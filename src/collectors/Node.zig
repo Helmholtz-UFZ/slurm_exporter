@@ -10,7 +10,6 @@ const Node = @This();
 const mebi_to_bytes = utils.mebi_to_bytes;
 
 states: States,
-load: Load,
 cpus: CPUs,
 memory: Memory,
 
@@ -25,7 +24,6 @@ const LabelsStateCount = struct {
 };
 
 const States = m.GaugeVec(u64, LabelsStateCount);
-const Load = m.GaugeVec(u32, LabelsPerHost);
 const CPUs = m.GaugeVec(u32, LabelsPerHost);
 const Memory = m.GaugeVec(u128, LabelsPerHost);
 
@@ -35,12 +33,6 @@ pub fn init(allocator: Allocator) !Node {
             allocator,
             "slurm_node_states_count",
             .{ .help = "State of the Nodes" },
-            .{},
-        ),
-        .load = try .init(
-            allocator,
-            "slurm_node_load",
-            .{ .help = "Load of the Nodes" },
             .{},
         ),
         .cpus = try .init(
