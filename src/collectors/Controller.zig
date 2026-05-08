@@ -6,7 +6,6 @@ const slurm = @import("slurm");
 const m = @import("metrics");
 const Allocator = std.mem.Allocator;
 const utils = @import("../util.zig");
-const Collector = @import("../Collector.zig");
 
 const Controller = @This();
 
@@ -61,8 +60,8 @@ const LabelsForJobStats = struct {
     state: []const u8,
 };
 
-pub fn init(allocator: Allocator) !Collector {
-    const controller: Controller = .{
+pub fn init(allocator: Allocator) !Controller {
+    return .{
         .server_threads = .init(
             "slurm_controller_server_threads",
             .{ .help = "Number of currently active Server Threads" },
@@ -241,7 +240,6 @@ pub fn init(allocator: Allocator) !Collector {
             .{},
         ),
     };
-    return .init(allocator, &controller);
 }
 
 pub fn reset(self: *Controller) void {

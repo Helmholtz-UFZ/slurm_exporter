@@ -3,15 +3,19 @@
 
 const std = @import("std");
 const slurm = @import("slurm");
-const collectors = @import("collectors.zig");
 const cli = @import("cli");
 const Allocator = std.mem.Allocator;
 const Registry = @import("Registry.zig");
 const httpz = @import("httpz");
 const build_meta = @import("build.zig.zon");
+const log = std.log.scoped(.main);
+
+pub const std_options: std.Options = .{
+    .logFn = logFn,
+};
 
 var rt: Runtime = undefined;
-var registry: Registry = undefined;
+var registry: Registry = .{};
 
 const CliOptions = struct {
     collectors: []const u8 = "node,controller,share,queue",
@@ -19,6 +23,7 @@ const CliOptions = struct {
     web_telemetry_path: []const u8 = "/metrics",
     version_info: bool = false,
     stdout: bool = false,
+    debug: bool = false,
 };
 
 pub const Runtime = struct {
@@ -88,39 +93,21 @@ pub fn main() !void {
     return r.run(&app);
 }
 
-pub fn shouldEnableCollector(name: []const u8) bool {
-    const maybe_enabled = std.mem.containsAtLeast(u8, rt.cli_args.collectors, 1, name);
-    if (!rt.cli_args.stdout) {
-        switch (maybe_enabled) {
-            true => std.debug.print("Enabled Collector: {s}\n", .{name}),
-            else => {},
-        }
-    }
-    return maybe_enabled;
-}
-
 fn run() !void {
-
     if (rt.cli_args.version_info) {
         std.debug.print("{s}\n", .{build_meta.version});
         return;
     }
 
-    registry = .init(rt.allocator);
-    defer registry.deinit();
-
-    if (shouldEnableCollector("node")) try registry.register(collectors.Node);
-    if (shouldEnableCollector("controller")) try registry.register(collectors.Controller);
-    if (shouldEnableCollector("queue")) try registry.register(collectors.Queue);
-    if (shouldEnableCollector("share")) try registry.register(collectors.Shares);
+    try registry.register(rt.allocator, rt.cli_args.collectors, rt.cli_args.stdout);
 
     switch (rt.cli_args.stdout) {
-        true => try print_stdout(),
-        false => try start_server(),
+        true => try print(),
+        false => try startServer(),
     }
 }
 
-fn print_stdout() !void {
+fn print() !void {
     var buffer: [1024]u8 = undefined;
     var stdout = std.fs.File.stdout().writerStreaming(&buffer);
 
@@ -130,7 +117,7 @@ fn print_stdout() !void {
     try stdout.interface.flush();
 }
 
-fn start_server() !void {
+fn startServer() !void {
     var server = try httpz.Server(void).init(rt.allocator, .{
         .address = .{ .addr = try .parseIpAndPort(rt.cli_args.web_listen_address)},
     }, {});
@@ -142,12 +129,30 @@ fn start_server() !void {
     var router = try server.router(.{});
     router.get(rt.cli_args.web_telemetry_path, metrics, .{});
 
-    std.debug.print("Metrics Endpoint is {s}\n", .{rt.cli_args.web_telemetry_path});
-    std.debug.print("Listening on http://{s}\n", .{rt.cli_args.web_listen_address});
+    log.info("Metrics Endpoint is {s}", .{rt.cli_args.web_telemetry_path});
+    log.info("Listening on http://{s}", .{rt.cli_args.web_listen_address});
     try server.listen();
 }
 
 pub fn metrics(_: *httpz.Request, res: *httpz.Response) !void {
     const result = try registry.collect(res.arena);
     try result.write(res.writer());
+}
+
+pub fn logFn(
+    comptime level: std.log.Level,
+    comptime scope: @Type(.enum_literal),
+    comptime format: []const u8,
+    log_args: anytype,
+) void {
+    const scope_name = switch (scope) {
+        .main, .registry => @tagName(scope),
+        else => return,
+    };
+
+    const level_prefix = comptime level.asText();
+    const scope_prefix = if (scope == .default) ": " else "(" ++ scope_name ++ "): ";
+
+    const fmt = level_prefix ++ scope_prefix ++ format ++ "\n";
+    std.debug.print(fmt, log_args);
 }

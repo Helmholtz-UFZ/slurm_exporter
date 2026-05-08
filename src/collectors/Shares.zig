@@ -7,7 +7,6 @@ const m = @import("metrics");
 const utils = @import("../util.zig");
 const Shares = @This();
 const Allocator = std.mem.Allocator;
-const Collector = @import("../Collector.zig");
 
 const Labels = struct {
     account: []const u8,
@@ -17,8 +16,8 @@ effective_usage: EffectiveUsage,
 
 const EffectiveUsage = m.GaugeVec(f64, Labels);
 
-pub fn init(allocator: Allocator) !Collector {
-    const shares: Shares = .{
+pub fn init(allocator: Allocator) !Shares {
+    return .{
         .effective_usage = try .init(
             allocator,
             "slurm_account_effective_usage",
@@ -26,7 +25,6 @@ pub fn init(allocator: Allocator) !Collector {
             .{},
         ),
     };
-    return .init(allocator, &shares);
 }
 
 pub fn reset(self: *Shares) void {

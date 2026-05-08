@@ -8,7 +8,6 @@ const utils = @import("../util.zig");
 const Allocator = std.mem.Allocator;
 const Node = @This();
 const mebi_to_bytes = utils.mebi_to_bytes;
-const Collector = @import("../Collector.zig");
 
 states: States,
 load: Load,
@@ -30,8 +29,8 @@ const Load = m.GaugeVec(u32, LabelsPerHost);
 const CPUs = m.GaugeVec(u32, LabelsPerHost);
 const Memory = m.GaugeVec(u128, LabelsPerHost);
 
-pub fn init(allocator: Allocator) !Collector {
-    const node: Node = .{
+pub fn init(allocator: Allocator) !Node {
+    return .{
         .states = try .init(
             allocator,
             "slurm_node_states_count",
@@ -57,7 +56,6 @@ pub fn init(allocator: Allocator) !Collector {
             .{},
         ),
     };
-    return .init(allocator, &node);
 }
 
 pub fn reset(self: *Node) void {

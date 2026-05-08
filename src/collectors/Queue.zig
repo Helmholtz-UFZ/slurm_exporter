@@ -8,7 +8,6 @@ const util = @import("../util.zig");
 const Allocator = std.mem.Allocator;
 const Queue = @This();
 const mebi_to_bytes = util.mebi_to_bytes;
-const Collector = @import("../Collector.zig");
 
 jobs: Jobs,
 cpus: CPUs,
@@ -27,8 +26,8 @@ const Labels = struct {
     user: []const u8,
 };
 
-pub fn init(allocator: Allocator) !Collector {
-    const queue: Queue = .{
+pub fn init(allocator: Allocator) !Queue {
+    return .{
         .jobs = try .init(
             allocator,
             "slurm_queue_jobs",
@@ -54,7 +53,6 @@ pub fn init(allocator: Allocator) !Collector {
             .{},
         ),
     };
-    return .init(allocator, &queue);
 }
 
 pub fn reset(self: *Queue) void {
