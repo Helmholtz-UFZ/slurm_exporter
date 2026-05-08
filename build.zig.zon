@@ -3,7 +3,7 @@
 
 .{
     .name = .slurm_exporter,
-    .version = "0.0.1",
+    .version = "0.1.0",
     .fingerprint = 0x232a6aeaea37025b,
     .minimum_zig_version = "0.15.2",
     .dependencies = .{
