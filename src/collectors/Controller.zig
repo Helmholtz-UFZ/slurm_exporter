@@ -5,15 +5,10 @@ const std = @import("std");
 const slurm = @import("slurm");
 const m = @import("metrics");
 const Allocator = std.mem.Allocator;
-const utils = @import("../util.zig");
-
 const Controller = @This();
-
-const MICROSECONDS = 1000000.0;
-
-fn toFloat(comptime T: type, value: u64) T {
-    return @as(T, @floatFromInt(value)) / MICROSECONDS;
-}
+const util = @import("../util.zig");
+const microToSeconds = util.microToSeconds;
+const json = @import("../json.zig");
 
 // Common slurmctld Diagnostics
 server_threads: m.Gauge(u32),
@@ -47,16 +42,16 @@ backfill_cycle_last_seconds: m.Gauge(f32),
 backfill_cycle_last_depth: m.Gauge(u32),
 backfill_cycle_last_depth_try: m.Gauge(u32),
 backfill_queue_length: m.Gauge(u32),
-backfill_queue_length_mean: m.Gauge(u32),
-backfill_queue_length_total: m.Counter(u32),
+backfill_queue_length_mean: m.Gauge(u64),
+backfill_queue_length_total: m.Counter(u64),
 backfill_table_size: m.Gauge(u32),
-backfill_table_size_mean: m.Gauge(u32),
+backfill_table_size_mean: m.Gauge(u64),
 backfill_table_size_total: m.Counter(u32),
 backfill_cycle_mean: m.Gauge(f64),
-backfill_cycle_mean_depth: m.Gauge(u32),
-backfill_cycle_mean_depth_try: m.Gauge(u32),
+backfill_cycle_mean_depth: m.Gauge(u64),
+backfill_cycle_mean_depth_try: m.Gauge(u64),
 
-const LabelsForJobStats = struct {
+pub const LabelsForJobStats = struct {
     state: []const u8,
 };
 
@@ -242,10 +237,6 @@ pub fn init(allocator: Allocator) !Controller {
     };
 }
 
-pub fn reset(self: *Controller) void {
-    utils.reset(self);
-}
-
 pub fn collect(self: *Controller, allocator: Allocator) !void {
     _ = allocator;
 
@@ -259,10 +250,10 @@ pub fn collect(self: *Controller, allocator: Allocator) !void {
     self.dbd_agent_queue_size.incrBy(stats.dbd_agent_queue_size);
     self.data_since_timestamp.incrBy(stats.req_time_start);
 
-    self.cycle_max_seconds.incrBy(toFloat(f32, stats.schedule_cycle_max));
+    self.cycle_max_seconds.incrBy(microToSeconds(f32, stats.schedule_cycle_max));
     self.cycles_total.incrBy(stats.schedule_cycle_counter);
-    self.cycles_seconds_total.incrBy(toFloat(f64, stats.schedule_cycle_sum));
-    self.cycle_mean.incrBy(toFloat(f64, stats.meanCycle()));
+    self.cycles_seconds_total.incrBy(microToSeconds(f64, stats.schedule_cycle_sum));
+    self.cycle_mean.incrBy(microToSeconds(f64, stats.meanCycle()));
     self.cycle_mean_depth.incrBy(stats.meanDepthCycle());
     self.cycle_depth.incrBy(stats.schedule_cycle_depth);
     self.cycles_per_minute.incrBy(stats.cyclesPerMinute());
@@ -270,19 +261,19 @@ pub fn collect(self: *Controller, allocator: Allocator) !void {
     self.backfill_jobs_total.incrBy(stats.bf_backfilled_jobs);
     self.backfill_het_jobs_total.incrBy(stats.bf_backfilled_het_jobs);
     self.backfill_cycles_total.incrBy(stats.bf_cycle_counter);
-    self.backfill_cycles_seconds_total.incrBy(toFloat(f64, stats.bf_cycle_sum));
+    self.backfill_cycles_seconds_total.incrBy(microToSeconds(f64, stats.bf_cycle_sum));
     self.backfill_last_cycle_timestamp.incrBy(stats.bf_when_last_cycle);
     self.backfill_active.incrBy(stats.bf_active);
     self.backfill_jobs.incrBy(stats.bf_last_backfilled_jobs);
-    self.backfill_cycle_max_seconds.incrBy(toFloat(f32, stats.bf_cycle_max));
-    self.backfill_cycle_last_seconds.incrBy(toFloat(f32, stats.bf_cycle_last));
+    self.backfill_cycle_max_seconds.incrBy(microToSeconds(f32, stats.bf_cycle_max));
+    self.backfill_cycle_last_seconds.incrBy(microToSeconds(f32, stats.bf_cycle_last));
     self.backfill_cycle_last_depth.incrBy(stats.bf_last_depth);
     self.backfill_cycle_last_depth_try.incrBy(stats.bf_last_depth_try);
     self.backfill_queue_length.incrBy(stats.bf_queue_len);
     self.backfill_queue_length_total.incrBy(stats.bf_queue_len_sum);
     self.backfill_table_size.incrBy(stats.bf_table_size);
     self.backfill_table_size_total.incrBy(stats.bf_table_size_sum);
-    self.backfill_cycle_mean.incrBy(toFloat(f64, stats.bfCycleMean()));
+    self.backfill_cycle_mean.incrBy(microToSeconds(f64, stats.bfCycleMean()));
     self.backfill_cycle_mean_depth.incrBy(stats.bfCycleMeanDepth());
     self.backfill_cycle_mean_depth_try.incrBy(stats.bfCycleMeanDepthTry());
     self.backfill_queue_length_mean.incrBy(stats.bfMeanQueueLength());
@@ -298,3 +289,71 @@ pub fn collect(self: *Controller, allocator: Allocator) !void {
     self.jobs_timestamp.incrBy(stats.job_states_ts);
 }
 
+pub fn collect_slurmrestd(self: *Controller, allocator: Allocator) !void {
+    const diag = try json.get(json.DiagResponse, allocator);
+    defer diag.deinit();
+    try self.parseJson(diag.value.statistics);
+}
+
+pub fn collect_cli(self: *Controller, allocator: Allocator) !void {
+    const diag = try json.cli(json.DiagResponse, allocator, &.{ "sdiag", "--json" });
+    defer diag.deinit();
+    try self.parseJson(diag.value.statistics);
+}
+
+pub fn parseJson(self: *Controller, stats: json.Statistics) !void {
+    self.server_threads.incrBy(stats.server_thread_count);
+    self.agent_queue_size.incrBy(stats.agent_queue_size);
+    self.agents.incrBy(stats.agent_count);
+    self.agent_threads.incrBy(stats.agent_thread_count);
+    self.dbd_agent_queue_size.incrBy(stats.dbd_agent_queue_size);
+
+    if (stats.req_time_start.set) {
+        self.data_since_timestamp.incrBy(stats.req_time_start.number);
+    }
+
+    self.cycle_max_seconds.incrBy(microToSeconds(f32, stats.schedule_cycle_max));
+    self.cycles_total.incrBy(stats.schedule_cycle_total);
+    self.cycles_seconds_total.incrBy(microToSeconds(f64, stats.schedule_cycle_sum));
+    self.cycle_mean.incrBy(microToSeconds(f64, stats.schedule_cycle_mean));
+    self.cycle_mean_depth.incrBy(stats.schedule_cycle_mean_depth);
+    self.cycle_depth.incrBy(stats.schedule_cycle_depth);
+    self.cycles_per_minute.incrBy(stats.schedule_cycle_per_minute);
+
+    self.backfill_jobs_total.incrBy(stats.bf_backfilled_jobs);
+    self.backfill_het_jobs_total.incrBy(stats.bf_backfilled_het_jobs);
+    self.backfill_cycles_total.incrBy(stats.bf_cycle_counter);
+    self.backfill_cycles_seconds_total.incrBy(microToSeconds(f64, stats.bf_cycle_sum));
+
+    if (stats.bf_when_last_cycle.set) {
+        self.backfill_last_cycle_timestamp.incrBy(stats.bf_when_last_cycle.number);
+    }
+
+    self.backfill_active.incrBy(if (stats.bf_active) 1 else 0);
+    self.backfill_jobs.incrBy(stats.bf_last_backfilled_jobs);
+    self.backfill_cycle_max_seconds.incrBy(microToSeconds(f32, stats.bf_cycle_max));
+    self.backfill_cycle_last_seconds.incrBy(microToSeconds(f32, stats.bf_cycle_last));
+    self.backfill_cycle_last_depth.incrBy(stats.bf_last_depth);
+    self.backfill_cycle_last_depth_try.incrBy(stats.bf_last_depth_try);
+    self.backfill_queue_length.incrBy(stats.bf_queue_len);
+    self.backfill_queue_length_total.incrBy(stats.bf_queue_len_sum);
+    self.backfill_table_size.incrBy(stats.bf_table_size);
+    self.backfill_table_size_total.incrBy(stats.bf_table_size_sum);
+    self.backfill_cycle_mean.incrBy(microToSeconds(f64, stats.bf_cycle_mean));
+    self.backfill_cycle_mean_depth.incrBy(stats.bf_depth_mean);
+    self.backfill_cycle_mean_depth_try.incrBy(stats.bf_depth_mean_try);
+    self.backfill_queue_length_mean.incrBy(stats.bf_queue_len_mean);
+    self.backfill_table_size_mean.incrBy(stats.bf_table_size_mean);
+
+    try self.jobs_total.incrBy(.{ .state = "submitted"}, stats.jobs_submitted);
+    try self.jobs_total.incrBy(.{ .state = "started"}, stats.jobs_started);
+    try self.jobs_total.incrBy(.{ .state = "completed"}, stats.jobs_completed);
+    try self.jobs_total.incrBy(.{ .state = "cancelled"}, stats.jobs_canceled);
+    try self.jobs_total.incrBy(.{ .state = "failed"}, stats.jobs_failed);
+    try self.jobs_total.incrBy(.{ .state = "pending"}, stats.jobs_pending);
+    try self.jobs_total.incrBy(.{ .state = "running"}, stats.jobs_running);
+
+    if (stats.job_states_ts.set) {
+        self.jobs_timestamp.incrBy(stats.job_states_ts.number);
+    }
+}

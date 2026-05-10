@@ -9,6 +9,14 @@ const Controller = @import("collectors/Controller.zig");
 const Node = @import("collectors/Node.zig");
 const Queue = @import("collectors/Queue.zig");
 const Shares = @import("collectors/Shares.zig");
+const config = @import("config");
+const json = @import("json.zig");
+
+pub const CollectionAPI = enum {
+    libslurm,
+    slurmrestd,
+    cli,
+};
 
 pub fn Initializer(comptime T: type) type {
     return ?*const @TypeOf(T.init);
@@ -41,6 +49,8 @@ const opts: m.RegistryOpts = .{
 };
 
 collectors: Collectors = .{},
+api: CollectionAPI,
+//slurmrestd_options: json.SlurmrestdOptions,
 
 pub fn register(self: *Registry, allocator: std.mem.Allocator, names: []const u8, stdout: bool) !void {
     const names_lower = try std.ascii.allocLowerString(allocator, names);
@@ -73,7 +83,15 @@ pub fn collect(self: *Registry, arena: std.mem.Allocator) !Collectors.Result {
     inline for (std.meta.fields(Collectors)) |field| {
         if (@field(self.collectors, field.name)) |collector_init| {
             var collector = try collector_init(arena);
-            try collector.collect(arena);
+            switch (self.api) {
+                .libslurm => {
+                    if (config.libslurm_enabled) {
+                        try collector.collect(arena);
+                    }
+                },
+                .slurmrestd => try collector.collect_slurmrestd(arena),
+                .cli => {},
+            }
             @field(result, field.name) = collector;
         }
     }

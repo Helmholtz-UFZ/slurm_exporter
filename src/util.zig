@@ -5,6 +5,12 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 pub const mebi_to_bytes = std.math.pow(u32, 2, 20);
+pub const MICROSECONDS = 1000000.0;
+
+pub fn microToSeconds(comptime T: type, value: u64) T {
+    return @as(T, @floatFromInt(value)) / MICROSECONDS;
+}
+
 
 pub fn uidToName(allocator: Allocator, uid: std.posix.uid_t) ![:0]const u8 {
     //  if (job.user_name) |uname| {

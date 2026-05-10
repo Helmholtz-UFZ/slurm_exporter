@@ -9,13 +9,19 @@ const Registry = @import("Registry.zig");
 const httpz = @import("httpz");
 const build_meta = @import("build.zig.zon");
 const log = std.log.scoped(.main);
+const config = @import("config");
+const json = @import("json.zig");
 
 pub const std_options: std.Options = .{
     .logFn = logFn,
 };
 
 var rt: Runtime = undefined;
-var registry: Registry = .{};
+var registry: Registry = undefined;
+const default_collection_api: Registry.CollectionAPI = if (config.libslurm_enabled)
+    .libslurm
+else
+    .slurmrestd;
 
 const CliOptions = struct {
     collectors: []const u8 = "node,controller,share,queue",
@@ -23,6 +29,9 @@ const CliOptions = struct {
     web_telemetry_path: []const u8 = "/metrics",
     version_info: bool = false,
     stdout: bool = false,
+    collection_api: Registry.CollectionAPI = default_collection_api,
+    web_slurmrestd_address: []const u8 = "127.0.0.1:6820",
+    web_slurmrestd_plugin: json.PluginType = .@"v0.0.44",
 };
 
 pub const Runtime = struct {
@@ -30,7 +39,7 @@ pub const Runtime = struct {
     cli_args: CliOptions = .{},
 
     pub fn init(allocator: Allocator) !Runtime {
-        slurm.init(null);
+        if (config.libslurm_enabled) slurm.init(null);
         return .{
             .allocator = allocator,
         };
@@ -81,6 +90,21 @@ pub fn main() !void {
                     .help = "Collect metrics once, print to stdout and exit",
                     .value_ref = r.mkRef(&rt.cli_args.stdout),
                 },
+                .{
+                    .long_name = "collection-api",
+                    .help = "Which Slurm API should be used",
+                    .value_ref = r.mkRef(&rt.cli_args.collection_api),
+                },
+                .{
+                    .long_name = "web.slurmrestd.address",
+                    .help = "Address for contacting the slurmrestd",
+                    .value_ref = r.mkRef(&rt.cli_args.web_slurmrestd_address),
+                },
+                .{
+                    .long_name = "web.slurmrestd.plugin",
+                    .help = "Which data parser plugin to use",
+                    .value_ref = r.mkRef(&rt.cli_args.web_slurmrestd_plugin),
+                },
             }),
             .target = cli.CommandTarget{
                 .action = cli.CommandAction{ .exec = run },
@@ -97,6 +121,14 @@ fn run() !void {
         std.debug.print("{s}\n", .{build_meta.version});
         return;
     }
+
+    if (rt.cli_args.collection_api == .libslurm and !config.libslurm_enabled) {
+        log.err("slurm-exporter is not compiled with libslurm capabilites", .{});
+        log.err("Use 'slurmrestd' instead, or recompile with -Denable-apis=libslurm", .{});
+        std.process.exit(1);
+    }
+
+    registry = .{ .api = rt.cli_args.collection_api };
 
     try registry.register(rt.allocator, rt.cli_args.collectors, rt.cli_args.stdout);
 

@@ -3,12 +3,17 @@
 
 const std = @import("std");
 const slurm = @import("slurm");
+const contains = std.mem.containsAtLeast;
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
     const version: ?[]const u8 = b.option([]const u8, "slurm-version", "Which Version of Slurm to target") orelse null;
+
+    const enable_apis: []const u8 = b.option([]const u8, "enable-apis", "Which collection APIs to enable") orelse "libslurm,slurmrestd";
+
+    const libslurm_enabled = contains(u8, enable_apis, 1, "libslurm");
 
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
@@ -49,6 +54,10 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+
+    const config = b.addOptions();
+    config.addOption(bool, "libslurm_enabled", libslurm_enabled);
+    exe_mod.addOptions("config", config);
 
     exe.root_module.addImport("slurm", slurm_dep.module("slurm"));
     exe.root_module.addImport("metrics", metrics_dep.module("metrics"));
