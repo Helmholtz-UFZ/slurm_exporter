@@ -289,19 +289,19 @@ pub fn collect(self: *Controller, allocator: Allocator) !void {
     self.jobs_timestamp.incrBy(stats.job_states_ts);
 }
 
-pub fn collect_slurmrestd(self: *Controller, allocator: Allocator) !void {
-    const diag = try json.get(json.DiagResponse, allocator);
+pub fn collectSlurmrestd(self: *Controller, allocator: Allocator) !void {
+    const diag = try json.slurmrestd(json.DiagResponse, allocator);
     defer diag.deinit();
     try self.parseJson(diag.value.statistics);
 }
 
-pub fn collect_cli(self: *Controller, allocator: Allocator) !void {
+pub fn collectCLI(self: *Controller, allocator: Allocator) !void {
     const diag = try json.cli(json.DiagResponse, allocator, &.{ "sdiag", "--json" });
     defer diag.deinit();
     try self.parseJson(diag.value.statistics);
 }
 
-pub fn parseJson(self: *Controller, stats: json.Statistics) !void {
+fn parseJson(self: *Controller, stats: json.Statistics) !void {
     self.server_threads.incrBy(stats.server_thread_count);
     self.agent_queue_size.incrBy(stats.agent_queue_size);
     self.agents.incrBy(stats.agent_count);

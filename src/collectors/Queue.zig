@@ -91,11 +91,20 @@ pub fn collect(self: *Queue, allocator: Allocator) !void {
     }
 }
 
-pub fn collect_slurmrestd(self: *Queue, allocator: Allocator) !void {
-    const job_resp = try json.get(json.JobsResponse, allocator);
-    defer job_resp.deinit();
+pub fn collectSlurmrestd(self: *Queue, allocator: Allocator) !void {
+    const resp = try json.slurmrestd(json.JobsResponse, allocator);
+    defer resp.deinit();
+    try self.parseJson(allocator, resp.value.jobs);
+}
 
-    for (job_resp.value.jobs) |job| {
+pub fn collectCLI(self: *Queue, allocator: Allocator) !void {
+    const resp = try json.cli(json.JobsResponse, allocator, &.{ "squeue", "--json" });
+    defer resp.deinit();
+    try self.parseJson(allocator, resp.value.jobs);
+}
+
+fn parseJson(self: *Queue, allocator: Allocator, jobs: []json.Job) !void {
+    for (jobs) |job| {
         if (job.job_state.len == 0) continue;
 
         const cpus = if (job.cpus.set) job.cpus.number else 1;

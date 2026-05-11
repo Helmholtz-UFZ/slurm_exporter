@@ -87,11 +87,20 @@ pub const AssociationType = enum {
     user,
 };
 
-pub fn collect_slurmrestd(self: *Shares, allocator: Allocator) !void {
-    const shares_resp = try json.get(json.SharesResponse, allocator);
-    defer shares_resp.deinit();
+pub fn collectSlurmrestd(self: *Shares, allocator: Allocator) !void {
+    const resp = try json.slurmrestd(json.SharesResponse, allocator);
+    defer resp.deinit();
+    try self.parseJson(resp.value.shares.shares);
+}
 
-    for (shares_resp.value.shares.shares) |share| {
+pub fn collectCLI(self: *Shares, allocator: Allocator) !void {
+    const resp = try json.cli(json.SharesResponse, allocator, &.{ "sshare", "--json" });
+    defer resp.deinit();
+    try self.parseJson(resp.value.shares.shares);
+}
+
+fn parseJson(self: *Shares, shares: []json.Shares) !void {
+    for (shares) |share| {
         const assoc_type: AssociationType = blk: {
             if (share.@"type".len == 0) continue;
 

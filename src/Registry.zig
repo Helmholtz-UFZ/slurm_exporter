@@ -12,7 +12,7 @@ const Shares = @import("collectors/Shares.zig");
 const config = @import("config");
 const json = @import("json.zig");
 
-pub const CollectionAPI = enum {
+pub const Backend = enum {
     libslurm,
     slurmrestd,
     cli,
@@ -49,7 +49,7 @@ const opts: m.RegistryOpts = .{
 };
 
 collectors: Collectors = .{},
-api: CollectionAPI,
+backend: Backend,
 //slurmrestd_options: json.SlurmrestdOptions,
 
 pub fn register(self: *Registry, allocator: std.mem.Allocator, names: []const u8, stdout: bool) !void {
@@ -81,16 +81,12 @@ pub fn collect(self: *Registry, arena: std.mem.Allocator) !Collectors.Result {
     var result: Collectors.Result = .{};
 
     inline for (std.meta.fields(Collectors)) |field| {
-        if (@field(self.collectors, field.name)) |collector_init| {
-            var collector = try collector_init(arena);
-            switch (self.api) {
-                .libslurm => {
-                    if (config.libslurm_enabled) {
-                        try collector.collect(arena);
-                    }
-                },
-                .slurmrestd => try collector.collect_slurmrestd(arena),
-                .cli => {},
+        if (@field(self.collectors, field.name)) |collectorInit| {
+            var collector = try collectorInit(arena);
+            switch (self.backend) {
+                .libslurm => if (config.backends.libslurm) try collector.collect(arena),
+                .slurmrestd => if (config.backends.slurmrestd) try collector.collectSlurmrestd(arena),
+                .cli => if (config.backends.cli) try collector.collectCLI(arena),
             }
             @field(result, field.name) = collector;
         }

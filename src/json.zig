@@ -228,7 +228,7 @@ pub fn cli(comptime T: type, allocator: std.mem.Allocator, argv: []const []const
     return parse(T, allocator, line_writer.written());
 }
 
-pub fn get(comptime T: type, allocator: std.mem.Allocator) !Parsed(T) {
+pub fn slurmrestd(comptime T: type, allocator: std.mem.Allocator) !Parsed(T) {
     var client = std.http.Client{ .allocator = allocator };
     defer client.deinit();
 

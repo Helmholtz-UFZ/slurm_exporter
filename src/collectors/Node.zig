@@ -143,11 +143,20 @@ pub fn collect(self: *Node, allocator: Allocator) !void {
     }
 }
 
-pub fn collect_slurmrestd(self: *Node, allocator: Allocator) !void {
-    const resp = try json.get(json.NodesReponse, allocator);
+pub fn collectSlurmrestd(self: *Node, allocator: Allocator) !void {
+    const resp = try json.slurmrestd(json.NodesReponse, allocator);
     defer resp.deinit();
+    try self.parseJson(allocator, resp.value.nodes);
+}
 
-    for (resp.value.nodes) |node| {
+pub fn collectCLI(self: *Node, allocator: Allocator) !void {
+    const resp = try json.cli(json.NodesReponse, allocator, &.{ "scontrol", "show", "nodes", "--json" });
+    defer resp.deinit();
+    try self.parseJson(allocator, resp.value.nodes);
+}
+
+fn parseJson(self: *Node, allocator: Allocator, nodes: []json.Node) !void {
+    for (nodes) |node| {
         const partitions = node.partitions;
         const reason = node.reason;
 
