@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 const std = @import("std");
+const mem = std.mem;
 const m = @import("metrics");
 const slurm = @import("slurm");
 const Allocator = std.mem.Allocator;
@@ -9,6 +10,7 @@ const Queue = @This();
 const util = @import("../util.zig");
 const mebi_to_bytes = util.mebi_to_bytes;
 const json = @import("../json.zig");
+const NoValue = slurm.common.NoValue;
 
 jobs: Jobs,
 cpus: CPUs,
@@ -62,32 +64,16 @@ pub fn collect(self: *Queue, allocator: Allocator) !void {
 
     var job_iter = jobs.iter();
     while (job_iter.next()) |job| {
-        const uname = try util.uidToName(allocator, job.user_id);
-        const partition = slurm.parseCStr(job.partition) orelse "unknown";
-        const account = slurm.parseCStr(job.account) orelse "unknown";
-        const cpus = job.num_cpus;
-
-        // TODO: Optionally ignore jobs stuck in DependencyNeverSatisfied
-
-        const queue_labels: Queue.Labels = .{
-            .partition = partition,
-            .account = account,
-            .user = uname,
-            .state = @tagName(job.state.base),
+        const schema: json.Job = .{
+            .user_name = try util.uidToName(allocator, job.user_id),
+            .partition = slurm.parseCStr(job.partition) orelse "unknown",
+            .account = slurm.parseCStr(job.account) orelse "unknown",
+            .cpus = .{ .set = job.num_cpus != NoValue.u32, .number = job.num_cpus },
+            .job_state = &.{ @tagName(job.state.base) },
+            .tres_req_str = slurm.parseCStr(job.tres_req_str) orelse "",
+            .tres_alloc_str = slurm.parseCStr(job.tres_alloc_str) orelse "",
         };
-
-        try self.jobs.incr(queue_labels);
-        try self.cpus.incrBy(queue_labels, cpus);
-        try self.memory.incrBy(queue_labels, job.memoryTotal() * mebi_to_bytes);
-
-        // TODO: For GPUS pending count (tres_req_str)?
-        const tres_alloc = slurm.parseCStrZ(job.tres_alloc_str) orelse "";
-        var gpu_iter = slurm.gres.GPU.iter(tres_alloc, ',');
-        while (gpu_iter.next()) |gpu| {
-            if (gpu.type) |_| continue;
-
-            try self.gpus.incrBy(queue_labels, gpu.count);
-        }
+        try parse(self, allocator, &schema);
     }
 }
 
@@ -103,38 +89,46 @@ pub fn collectCLI(self: *Queue, allocator: Allocator) !void {
     try self.parseJson(allocator, resp.value.jobs);
 }
 
-fn parseJson(self: *Queue, allocator: Allocator, jobs: []json.Job) !void {
-    for (jobs) |job| {
-        if (job.job_state.len == 0) continue;
+fn parse(self: *Queue, allocator: Allocator, job: *const json.Job) !void {
+    if (job.job_state.len == 0) return;
 
-        const cpus = if (job.cpus.set) job.cpus.number else 1;
-        // Base State is always first, and we only need that one.
-        const state = try std.ascii.allocLowerString(allocator, job.job_state[0]);
+    // Base State is always first, and we only need that one.
+    const state = try std.ascii.allocLowerString(allocator, job.job_state[0]);
 
-        const queue_labels: Queue.Labels = .{
-            .partition = job.partition,
-            .account = job.account,
-            .user = job.user_name,
-            .state = state,
-        };
+    const queue_labels: Queue.Labels = .{
+        .partition = job.partition,
+        .account = job.account,
+        .user = job.user_name,
+        .state = state,
+    };
 
-        try self.jobs.incr(queue_labels);
-        try self.cpus.incrBy(queue_labels, cpus);
+    try self.jobs.incr(queue_labels);
 
-        const tres_str = if (job.tres_alloc_str.len > 0)
-            job.tres_alloc_str
-        else
-            job.tres_req_str;
+    const cpus = if (job.cpus.set) job.cpus.number else 1;
+    try self.cpus.incrBy(queue_labels, cpus);
 
-        var tres_iter = slurm.tres.iter(try allocator.dupeZ(u8, tres_str), ',');
-        while (tres_iter.next()) |tres| {
-            if (std.mem.eql(u8, tres.type, "mem")) {
-                try self.memory.incrBy(queue_labels, tres.count * mebi_to_bytes);
-            }
+    const tres_str = if (job.tres_alloc_str.len > 0)
+        job.tres_alloc_str
+    else
+        job.tres_req_str;
 
-            if (std.mem.eql(u8, tres.type, "gres") and std.mem.eql(u8, tres.name.?, "gpu")) {
+    var tres_iter = slurm.tres.iter(try allocator.dupeZ(u8, tres_str), ',');
+    while (tres_iter.next()) |tres| {
+        if (mem.eql(u8, tres.type, "mem")) {
+            try self.memory.incrBy(queue_labels, tres.count * mebi_to_bytes);
+        }
+
+        if (mem.eql(u8, tres.type, "gres")) {
+            const name = tres.name orelse "";
+            if (mem.eql(u8, name, "gpu")) {
                 try self.gpus.incrBy(queue_labels, tres.count);
             }
         }
+    }
+}
+
+fn parseJson(self: *Queue, allocator: Allocator, jobs: []json.Job) !void {
+    for (jobs) |job| {
+        try parse(self, allocator, &job);
     }
 }

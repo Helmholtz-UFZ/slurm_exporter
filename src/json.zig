@@ -1,6 +1,7 @@
 const std = @import("std");
 const Parsed = std.json.Parsed;
 const Runtime = @import("main.zig").Runtime;
+const slurm = @import("slurm");
 
 pub const PluginType = enum {
     @"v0.0.44",
@@ -164,12 +165,23 @@ pub const Node = struct {
     name: []const u8,
     cpus: u32,
     alloc_cpus: u32,
-    alloc_memory: u64,
+    alloc_memory: u128,
     alloc_idle_cpus: u32,
-    real_memory: u64,
+    real_memory: u128,
     partitions: []const []const u8,
     state: []const []const u8,
     reason: []const u8,
+    internal: Internal = .{},
+
+    pub const Internal = struct {
+        state: ?Internal.State = null,
+
+        pub const State = struct {
+            base: slurm.Node.State.Base,
+            flags_slice: []const []const u8 = &.{},
+            flags: slurm.Node.State.Flags,
+        };
+    };
 };
 
 pub const Job = struct {
@@ -193,7 +205,7 @@ pub const Shares = struct {
 
     const Fairshare = struct {
         factor: Number(f64),
-        level: Number(f64),
+        level: Number(f64) = .{ .number = 0 },
     };
 };
 

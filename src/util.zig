@@ -11,7 +11,6 @@ pub fn microToSeconds(comptime T: type, value: u64) T {
     return @as(T, @floatFromInt(value)) / MICROSECONDS;
 }
 
-
 pub fn uidToName(allocator: Allocator, uid: std.posix.uid_t) ![:0]const u8 {
     //  if (job.user_name) |uname| {
     //      return std.mem.span(uname);
@@ -28,59 +27,29 @@ pub fn uidToName(allocator: Allocator, uid: std.posix.uid_t) ![:0]const u8 {
     return try std.fmt.allocPrintSentinel(allocator, "{d}", .{uid}, 0);
 }
 
-pub fn deinit(metrics: anytype) void {
-    const S = @typeInfo(@TypeOf(metrics)).pointer.child;
-    const fields = @typeInfo(S).@"struct".fields;
-
-    inline for (fields) |f| {
-        switch (@typeInfo(f.type)) {
-            .@"union" => {
-                const h = @constCast(&@field(metrics, f.name));
-                switch (h.*) {
-                   .noop => {},
-                   .impl => |*impl| {
-                        if (@hasDecl(@TypeOf(impl.*), "deinit")) {
-                            impl.deinit();
-                        }
-                   }
-                }
-            },
-            else => {},
-        }
+pub fn strToSlice(data: []const u8, allocator: std.mem.Allocator, comptime delim: u8) ![]const []const u8 {
+    var iter = std.mem.splitScalar(u8, data, delim);
+    var buf: std.ArrayList([]const u8) = .empty;
+    while (iter.next()) |item| {
+        try buf.append(allocator, item);
     }
+    return buf.toOwnedSlice(allocator);
 }
 
-pub fn resetSingle(metrics: anytype) void {
-    const T = @TypeOf(metrics.impl);
-
-    if (@hasField(T, "values")) {
-        var it = metrics.impl.values.iterator();
-        while (it.next()) |kv| {
-            const InnerT = @TypeOf(kv.value_ptr.*);
-            if (@hasField(InnerT, "value")) {
-                kv.value_ptr.value = 0;
-            } else if (@hasField(InnerT, "count")) {
-                kv.value_ptr.count = 0;
-            }
-        }
-    } else if (@hasField(T, "value")) {
-        metrics.impl.value = 0;
-    } else if (@hasField(T, "count")) {
-        metrics.impl.count = 0;
-    }
+pub fn slurmStrToSlice(data: ?[*:0]const u8, allocator: std.mem.Allocator, comptime delim: u8) ![]const []const u8 {
+    const str = if (data) |d| std.mem.span(d) else "";
+    return strToSlice(str, allocator, delim);
 }
 
-pub fn reset(metrics: anytype) void {
-    const T = @TypeOf(metrics);
-    const S = @typeInfo(T).pointer.child;
-    const fields = @typeInfo(S).@"struct".fields;
+pub fn asciiLowerSlice(allocator: std.mem.Allocator, data: []const []const u8, comptime size: usize) !@TypeOf(data) {
+    // Assume that if the first char is already lowercase, the rest is too.
+    if (data.len > 0 and std.ascii.isLower(data[0][0])) return data;
 
-    inline for (fields) |f| {
-        switch (@typeInfo(f.type)) {
-            .@"union" => {
-                resetSingle(@constCast(&@field(metrics, f.name)));
-            },
-            else => {},
-        }
+    var buf: [size][]const u8 = undefined;
+    var idx: usize = 0;
+    for (data) |item| {
+        buf[idx] = try std.ascii.allocLowerString(allocator, item);
+        idx += 1;
     }
+    return allocator.dupe([]const u8, buf[0..idx]);
 }

@@ -54,6 +54,12 @@ pub fn init(allocator: Allocator) !Shares {
     };
 }
 
+fn hasValue(value: anytype) bool {
+    const nvf64: f64 = comptime @floatFromInt(NoValue.u64);
+    if (value == NoValue.u32 or value == nvf64) return false;
+    return true;
+}
+
 pub fn collect(self: *Shares, allocator: Allocator) !void {
     _ = allocator;
     var resp = try slurm.db.association.loadSharesAll();
@@ -61,24 +67,27 @@ pub fn collect(self: *Shares, allocator: Allocator) !void {
 
     var resp_iter = try resp.iter();
     while (resp_iter.next()) |share| {
-        const is_user_assoc = share.isUserAssociation();
-        const account, const user = if (is_user_assoc)
-            .{slurm.parseCStr(share.parent) orelse "", slurm.parseCStr(share.name) orelse ""}
-        else
-            .{slurm.parseCStr(share.name) orelse continue, ""};
-
-        const labels: Shares.Labels = .{
-            .account = account,
-            .user = user,
+        const b: json.Shares = .{
+            .name = slurm.parseCStr(share.name) orelse "",
+            .parent = slurm.parseCStr(share.parent) orelse "",
+            .effective_usage = .{
+                .set = hasValue(share.usage_efctv),
+                .number = share.usage_efctv,
+            },
+            .usage_normalized = .{
+                .set = hasValue(share.usage_norm),
+                .number = share.usage_norm,
+            },
+            .usage = share.usage_raw,
+            .fairshare = .{
+                .factor = .{
+                    .set = hasValue(share.fs_factor),
+                    .number = share.fs_factor,
+                },
+            },
+            .type = if (share.isUserAssociation()) &.{"USER"} else &.{"ASSOCIATION"},
         };
-        try self.effective_usage.incrBy(labels, share.usage_efctv);
-        if (share.usage_norm != NoValue.u32) {
-            try self.normalized_usage.incrBy(labels, share.usage_norm);
-        }
-        if (is_user_assoc) {
-            try self.fairshare_factor.incrBy(labels, share.fs_factor);
-        }
-        try self.raw_usage.incrBy(labels, share.usage_raw);
+        try self.parse(&b);
     }
 }
 
@@ -90,47 +99,47 @@ pub const AssociationType = enum {
 pub fn collectSlurmrestd(self: *Shares, allocator: Allocator) !void {
     const resp = try json.slurmrestd(json.SharesResponse, allocator);
     defer resp.deinit();
-    try self.parseJson(resp.value.shares.shares);
+    try self.parseAll(resp.value.shares.shares);
 }
 
 pub fn collectCLI(self: *Shares, allocator: Allocator) !void {
     const resp = try json.cli(json.SharesResponse, allocator, &.{ "sshare", "--json" });
     defer resp.deinit();
-    try self.parseJson(resp.value.shares.shares);
+    try self.parseAll(resp.value.shares.shares);
 }
 
-fn parseJson(self: *Shares, shares: []json.Shares) !void {
-    for (shares) |share| {
-        const assoc_type: AssociationType = blk: {
-            if (share.@"type".len == 0) continue;
+fn parse(self: *Shares, share: *const json.Shares) !void {
+    const assoc_type: AssociationType = blk: {
+        if (share.type.len == 0) return;
 
-            if (std.mem.eql(u8, share.type[0], "ASSOCIATION")) break :blk .association;
-            if (std.mem.eql(u8, share.type[0], "USER")) break :blk .user;
+        if (std.mem.eql(u8, share.type[0], "ASSOCIATION")) break :blk .association;
+        if (std.mem.eql(u8, share.type[0], "USER")) break :blk .user;
 
-            continue;
-        };
+        return;
+    };
 
-        const account, const user = switch (assoc_type) {
-            .user => .{share.parent, share.name},
-            .association => .{share.name, ""},
-        };
+    const labels: Shares.Labels = switch (assoc_type) {
+        .user => .{ .account = share.parent, .user = share.name },
+        .association => .{ .account = share.name, .user = "" },
+    };
 
-        const labels: Shares.Labels = .{
-            .account = account,
-            .user = user,
-        };
-
+    if (share.effective_usage.set) {
         try self.effective_usage.incrBy(labels, share.effective_usage.number);
-        if (share.usage_normalized.set) {
-            try self.normalized_usage.incrBy(labels, share.usage_normalized.number);
-        }
-        if (assoc_type == .user and share.fairshare.factor.set) {
-            try self.fairshare_factor.incrBy(labels, share.fairshare.factor.number);
-        }
-        try self.raw_usage.incrBy(labels, share.usage);
+    }
+    if (share.usage_normalized.set) {
+        try self.normalized_usage.incrBy(labels, share.usage_normalized.number);
+    }
+    if (assoc_type == .user and share.fairshare.factor.set) {
+        try self.fairshare_factor.incrBy(labels, share.fairshare.factor.number);
+    }
+    try self.raw_usage.incrBy(labels, share.usage);
+}
+
+fn parseAll(self: *Shares, shares: []json.Shares) !void {
+    for (shares) |share| {
+        try parse(self, &share);
     }
 }
-
 
 //  const parsed = try std.json.parseFromSlice(
 //      json.Shares,
