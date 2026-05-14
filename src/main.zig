@@ -27,7 +27,7 @@ else
     .slurmrestd;
 
 const CliOptions = struct {
-    collectors: []const u8 = "node,controller,share,queue",
+    collectors: []const u8 = "node,controller,shares,queue",
     web_listen_address: []const u8 = "127.0.0.1:5882",
     web_telemetry_path: []const u8 = "/metrics",
     version_info: bool = false,
