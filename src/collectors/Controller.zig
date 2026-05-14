@@ -11,6 +11,8 @@ const microToSeconds = util.microToSeconds;
 const json = @import("../json.zig");
 const cmd = @import("../cmd.zig");
 
+pub const cli_command = "sdiag";
+
 // Common slurmctld Diagnostics
 server_threads: m.Gauge(u32),
 agent_queue_size: m.Gauge(u32),

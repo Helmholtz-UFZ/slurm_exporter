@@ -16,6 +16,8 @@ pub const Labels = struct {
     user: []const u8,
 };
 
+pub const cli_command = "sshare";
+
 effective_usage: EffectiveUsage,
 normalized_usage: NormalizedUsage,
 raw_usage: RawUsage,

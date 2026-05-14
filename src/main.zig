@@ -148,10 +148,6 @@ pub fn validateBackend() void {
                 std.process.exit(1);
             }
         }
-
-        // TODO: If the backend is .cli or .slurmrestd, check if Slurm is
-        // compiled with JSON support, and whether we can find all binaries. If
-        // not, we can fail immediately.
     }
 }
 

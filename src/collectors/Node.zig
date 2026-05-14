@@ -20,6 +20,8 @@ states: States,
 cpus: CPUs,
 memory: Memory,
 
+pub const cli_command = "scontrol";
+
 pub const LabelsPerHost = struct {
     state: []const u8 = "unknown",
     partition: []const u8 = "unknown",

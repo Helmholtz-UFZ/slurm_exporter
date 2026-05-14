@@ -23,6 +23,8 @@ const CPUs = m.GaugeVec(u32, Labels);
 const Memory = m.GaugeVec(u64, Labels);
 const GPUs = m.GaugeVec(u64, Labels);
 
+pub const cli_command = "squeue";
+
 pub const Labels = struct {
     partition: []const u8,
     account: []const u8,
