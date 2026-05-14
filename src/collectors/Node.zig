@@ -8,6 +8,7 @@ const Allocator = std.mem.Allocator;
 const Node = @This();
 const json = @import("../json.zig");
 const utils = @import("../util.zig");
+const cmd = @import("../cmd.zig");
 const mebi_to_bytes = utils.mebi_to_bytes;
 const contains = std.mem.containsAtLeast;
 const eql = std.mem.eql;
@@ -94,7 +95,7 @@ pub fn collectSlurmrestd(self: *Node, arena: Allocator) !void {
 }
 
 pub fn collectCLI(self: *Node, arena: Allocator) !void {
-    const resp = try json.cli(json.NodesReponse, arena, &.{ "scontrol", "show", "nodes", "--json" });
+    const resp = try cmd.runAndParse(json.NodesReponse, arena, &.{ "scontrol", "show", "nodes", "--json" });
     defer resp.deinit();
     try self.parseJson(arena, resp.value.nodes);
 }

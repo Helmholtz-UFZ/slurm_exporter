@@ -11,6 +11,7 @@ const util = @import("../util.zig");
 const mebi_to_bytes = util.mebi_to_bytes;
 const json = @import("../json.zig");
 const NoValue = slurm.common.NoValue;
+const cmd = @import("../cmd.zig");
 
 jobs: Jobs,
 cpus: CPUs,
@@ -84,7 +85,7 @@ pub fn collectSlurmrestd(self: *Queue, allocator: Allocator) !void {
 }
 
 pub fn collectCLI(self: *Queue, allocator: Allocator) !void {
-    const resp = try json.cli(json.JobsResponse, allocator, &.{ "squeue", "--json" });
+    const resp = try cmd.runAndParse(json.JobsResponse, allocator, &.{ "squeue", "--json" });
     defer resp.deinit();
     try self.parseJson(allocator, resp.value.jobs);
 }

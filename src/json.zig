@@ -218,28 +218,6 @@ pub fn parse(comptime T: type, allocator: std.mem.Allocator, data: []u8) !Parsed
     return parsed;
 }
 
-pub fn cli(comptime T: type, allocator: std.mem.Allocator, argv: []const []const u8) !Parsed(T) {
-    var buf: [1024]u8 = undefined;
-
-    var command: std.process.Child = .init(argv, allocator);
-    command.stdin_behavior = .Ignore;
-    command.stderr_behavior = .Pipe;
-    command.stdout_behavior = .Pipe;
-
-    try command.spawn();
-    const stdout = command.stdout.?;
-    var stdout_reader = stdout.reader(&buf);
-    var reader = &stdout_reader.interface;
-
-    var line_writer: std.Io.Writer.Allocating = .init(allocator);
-    defer line_writer.deinit();
-
-    _ = try reader.streamRemaining(&line_writer.writer);
-    _ = try command.wait();
-
-    return parse(T, allocator, line_writer.written());
-}
-
 pub fn slurmrestd(comptime T: type, allocator: std.mem.Allocator) !Parsed(T) {
     var client = std.http.Client{ .allocator = allocator };
     defer client.deinit();

@@ -9,6 +9,7 @@ const Controller = @This();
 const util = @import("../util.zig");
 const microToSeconds = util.microToSeconds;
 const json = @import("../json.zig");
+const cmd = @import("../cmd.zig");
 
 // Common slurmctld Diagnostics
 server_threads: m.Gauge(u32),
@@ -296,7 +297,7 @@ pub fn collectSlurmrestd(self: *Controller, allocator: Allocator) !void {
 }
 
 pub fn collectCLI(self: *Controller, allocator: Allocator) !void {
-    const diag = try json.cli(json.DiagResponse, allocator, &.{ "sdiag", "--json" });
+    const diag = try cmd.runAndParse(json.DiagResponse, allocator, &.{ "sdiag", "--json" });
     defer diag.deinit();
     try self.parseJson(diag.value.statistics);
 }

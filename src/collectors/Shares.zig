@@ -9,6 +9,7 @@ const Shares = @This();
 const Allocator = std.mem.Allocator;
 const NoValue = slurm.common.NoValue;
 const json = @import("../json.zig");
+const cmd = @import("../cmd.zig");
 
 pub const Labels = struct {
     account: []const u8,
@@ -103,7 +104,7 @@ pub fn collectSlurmrestd(self: *Shares, allocator: Allocator) !void {
 }
 
 pub fn collectCLI(self: *Shares, allocator: Allocator) !void {
-    const resp = try json.cli(json.SharesResponse, allocator, &.{ "sshare", "--json" });
+    const resp = try cmd.runAndParse(json.SharesResponse, allocator, &.{ "sshare", "--json" });
     defer resp.deinit();
     try self.parseAll(resp.value.shares.shares);
 }
