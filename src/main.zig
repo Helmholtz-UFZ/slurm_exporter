@@ -34,8 +34,17 @@ const CliOptions = struct {
     stdout: bool = false,
     backend: Registry.Backend = default_backend,
     list_backends: bool = false,
-    web_slurmrestd_address: []const u8 = "127.0.0.1:6820",
-    web_slurmrestd_plugin: json.PluginType = .@"v0.0.44",
+    backend_slurmrestd_options: Registry.Backend.SlurmrestdOptions = .{},
+    backend_cli_options: Registry.Backend.CLIOptions = .{},
+
+    pub const BackendCLIOptions = struct {
+        plugin: json.PluginType = .@"v0.0.44",
+    };
+
+    pub const BackendSlurmrestdOptions = struct {
+        address: []const u8 = "127.0.0.1:6820",
+        plugin: json.PluginType = .@"v0.0.44",
+    };
 };
 
 pub const Runtime = struct {
@@ -108,19 +117,30 @@ pub fn main() !void {
 
     try options.appendSlice(rt.allocator, base_cli_options);
     if (config.backends.slurmrestd) {
-        const slurmrestd_cli_options: []const cli.Option = &.{
+        const backend_slurmrestd_options: []const cli.Option = &.{
             .{
-                .long_name = "web.slurmrestd.address",
+                .long_name = "backend.slurmrestd.address",
                 .help = "Address for contacting the slurmrestd",
-                .value_ref = r.mkRef(&rt.cli_args.web_slurmrestd_address),
+                .value_ref = r.mkRef(&rt.cli_args.backend_slurmrestd_options.address),
             },
             .{
-                .long_name = "web.slurmrestd.plugin",
+                .long_name = "backend.slurmrestd.data_parser",
                 .help = "Which data parser plugin to use",
-                .value_ref = r.mkRef(&rt.cli_args.web_slurmrestd_plugin),
+                .value_ref = r.mkRef(&rt.cli_args.backend_slurmrestd_options.plugin),
             },
         };
-        try options.appendSlice(rt.allocator, slurmrestd_cli_options);
+        try options.appendSlice(rt.allocator, backend_slurmrestd_options);
+    }
+
+    if (config.backends.cli) {
+        const backend_cli_options: []const cli.Option = &.{
+            .{
+                .long_name = "backend.cli.data_parser",
+                .help = "Address for contacting the slurmrestd",
+                .value_ref = r.mkRef(&rt.cli_args.backend_cli_options.plugin),
+            },
+        };
+        try options.appendSlice(rt.allocator, backend_cli_options);
     }
 
     const app = cli.App{
@@ -164,7 +184,14 @@ fn run() !void {
 
     validateBackend();
 
-    registry = .{ .backend = rt.cli_args.backend };
+    registry = .{
+        .backend = rt.cli_args.backend,
+        .backend_options = switch (rt.cli_args.backend) {
+            .cli => .{ .cli = rt.cli_args.backend_cli_options },
+            .slurmrestd => .{ .slurmrestd = rt.cli_args.backend_slurmrestd_options },
+            .libslurm => .{ .libslurm = {}},
+        },
+    };
     try registry.register(rt.allocator, rt.cli_args.collectors, rt.cli_args.stdout);
 
     switch (rt.cli_args.stdout) {

@@ -9,6 +9,8 @@ const Node = @This();
 const json = @import("../json.zig");
 const utils = @import("../util.zig");
 const cmd = @import("../cmd.zig");
+const slurmrestd = @import("../slurmrestd.zig");
+const Registry = @import("../Registry.zig");
 const mebi_to_bytes = utils.mebi_to_bytes;
 const contains = std.mem.containsAtLeast;
 const eql = std.mem.eql;
@@ -90,14 +92,19 @@ pub fn collect(self: *Node, arena: Allocator) !void {
     }
 }
 
-pub fn collectSlurmrestd(self: *Node, arena: Allocator) !void {
-    const resp = try json.slurmrestd(json.NodesReponse, arena);
+pub fn collectSlurmrestd(self: *Node, arena: Allocator, options: Registry.Backend.SlurmrestdOptions) !void {
+    const resp = try slurmrestd.get(json.NodesReponse, arena, options);
     defer resp.deinit();
     try self.parseJson(arena, resp.value.nodes);
 }
 
-pub fn collectCLI(self: *Node, arena: Allocator) !void {
-    const resp = try cmd.runAndParse(json.NodesReponse, arena, &.{ "scontrol", "show", "nodes", "--json" });
+pub fn collectCLI(self: *Node, arena: Allocator, options: Registry.Backend.CLIOptions) !void {
+    const resp = try cmd.runAndParse(
+        json.NodesReponse,
+        arena,
+        &.{ "scontrol", "show", "nodes" },
+        options,
+    );
     defer resp.deinit();
     try self.parseJson(arena, resp.value.nodes);
 }

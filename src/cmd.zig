@@ -3,6 +3,8 @@ const Parsed = std.json.Parsed;
 const slurm = @import("slurm");
 const json = @import("json.zig");
 const AllocatingWriter = std.Io.Writer.Allocating;
+const Registry = @import("Registry.zig");
+const CLIOptions = Registry.Backend.CLIOptions;
 
 pub fn run(allocator: std.mem.Allocator, argv: []const []const u8) !AllocatingWriter {
     var buf: [1024]u8 = undefined;
@@ -26,8 +28,11 @@ pub fn run(allocator: std.mem.Allocator, argv: []const []const u8) !AllocatingWr
     return line_writer;
 }
 
-pub fn runAndParse(comptime T: type, allocator: std.mem.Allocator, argv: []const []const u8) !Parsed(T) {
-    var writer = try run(allocator, argv);
+pub fn runAndParse(comptime T: type, allocator: std.mem.Allocator, comptime argv: []const []const u8, options: CLIOptions) !Parsed(T) {
+    var buf: [32]u8 = undefined;
+    const json_flag = try std.fmt.bufPrint(&buf, "--json={s}", .{@tagName(options.plugin)});
+
+    var writer = try run(allocator, argv ++ [_][]const u8{json_flag});
     defer writer.deinit();
     return json.parse(T, allocator, writer.written());
 }

@@ -8,8 +8,10 @@ const utils = @import("../util.zig");
 const Shares = @This();
 const Allocator = std.mem.Allocator;
 const NoValue = slurm.common.NoValue;
+const slurmrestd = @import("../slurmrestd.zig");
 const json = @import("../json.zig");
 const cmd = @import("../cmd.zig");
+const Registry = @import("../Registry.zig");
 
 pub const Labels = struct {
     account: []const u8,
@@ -99,14 +101,20 @@ pub const AssociationType = enum {
     user,
 };
 
-pub fn collectSlurmrestd(self: *Shares, allocator: Allocator) !void {
-    const resp = try json.slurmrestd(json.SharesResponse, allocator);
+pub fn collectSlurmrestd(self: *Shares, allocator: Allocator, options: Registry.Backend.SlurmrestdOptions) !void {
+    const resp = try slurmrestd.get(json.SharesResponse, allocator, options);
     defer resp.deinit();
     try self.parseAll(resp.value.shares.shares);
 }
 
-pub fn collectCLI(self: *Shares, allocator: Allocator) !void {
-    const resp = try cmd.runAndParse(json.SharesResponse, allocator, &.{ "sshare", "--json" });
+pub fn collectCLI(self: *Shares, allocator: Allocator, options: Registry.Backend.CLIOptions) !void {
+    const resp = try cmd.runAndParse(
+        json.SharesResponse,
+        allocator,
+        &.{ "sshare" },
+        options,
+
+    );
     defer resp.deinit();
     try self.parseAll(resp.value.shares.shares);
 }

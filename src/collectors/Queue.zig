@@ -6,6 +6,8 @@ const mem = std.mem;
 const m = @import("metrics");
 const slurm = @import("slurm");
 const Allocator = std.mem.Allocator;
+const Registry = @import("../Registry.zig");
+const slurmrestd = @import("../slurmrestd.zig");
 const Queue = @This();
 const util = @import("../util.zig");
 const mebi_to_bytes = util.mebi_to_bytes;
@@ -80,14 +82,14 @@ pub fn collect(self: *Queue, allocator: Allocator) !void {
     }
 }
 
-pub fn collectSlurmrestd(self: *Queue, allocator: Allocator) !void {
-    const resp = try json.slurmrestd(json.JobsResponse, allocator);
+pub fn collectSlurmrestd(self: *Queue, allocator: Allocator, options: Registry.Backend.SlurmrestdOptions) !void {
+    const resp = try slurmrestd.get(json.JobsResponse, allocator, options);
     defer resp.deinit();
     try self.parseJson(allocator, resp.value.jobs);
 }
 
-pub fn collectCLI(self: *Queue, allocator: Allocator) !void {
-    const resp = try cmd.runAndParse(json.JobsResponse, allocator, &.{ "squeue", "--json" });
+pub fn collectCLI(self: *Queue, allocator: Allocator, options: Registry.Backend.CLIOptions) !void {
+    const resp = try cmd.runAndParse(json.JobsResponse, allocator, &.{ "squeue" }, options);
     defer resp.deinit();
     try self.parseJson(allocator, resp.value.jobs);
 }

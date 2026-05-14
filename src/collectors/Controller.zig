@@ -5,6 +5,8 @@ const std = @import("std");
 const slurm = @import("slurm");
 const m = @import("metrics");
 const Allocator = std.mem.Allocator;
+const Registry = @import("../Registry.zig");
+const slurmrestd = @import("../slurmrestd.zig");
 const Controller = @This();
 const util = @import("../util.zig");
 const microToSeconds = util.microToSeconds;
@@ -292,14 +294,19 @@ pub fn collect(self: *Controller, allocator: Allocator) !void {
     self.jobs_timestamp.incrBy(stats.job_states_ts);
 }
 
-pub fn collectSlurmrestd(self: *Controller, allocator: Allocator) !void {
-    const diag = try json.slurmrestd(json.DiagResponse, allocator);
+pub fn collectSlurmrestd(self: *Controller, allocator: Allocator, options: Registry.Backend.SlurmrestdOptions) !void {
+    const diag = try slurmrestd.get(json.DiagResponse, allocator, options);
     defer diag.deinit();
     try self.parseJson(diag.value.statistics);
 }
 
-pub fn collectCLI(self: *Controller, allocator: Allocator) !void {
-    const diag = try cmd.runAndParse(json.DiagResponse, allocator, &.{ "sdiag", "--json" });
+pub fn collectCLI(self: *Controller, allocator: Allocator, options: Registry.Backend.CLIOptions) !void {
+    const diag = try cmd.runAndParse(
+        json.DiagResponse,
+        allocator,
+        &.{ "sdiag" },
+        options,
+    );
     defer diag.deinit();
     try self.parseJson(diag.value.statistics);
 }

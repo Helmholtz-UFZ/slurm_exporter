@@ -1,21 +1,11 @@
 const std = @import("std");
 const Parsed = std.json.Parsed;
-const Runtime = @import("main.zig").Runtime;
 const slurm = @import("slurm");
 
 pub const PluginType = enum {
     @"v0.0.44",
+    @"v0.0.43",
 };
-
-pub const SlurmrestdOptions = struct {
-    plugin_type: PluginType,
-    url: []const u8,
-    protocol: []const u8 = "http",
-    tls: bool = false,
-};
-
-const plugin = "v0.0.44";
-const uri = "http://localhost:6820/slurm";
 
 pub fn Number(comptime T: type) type {
     return struct {
@@ -216,47 +206,4 @@ pub fn parse(comptime T: type, allocator: std.mem.Allocator, data: []u8) !Parsed
         .ignore_unknown_fields = true,
     });
     return parsed;
-}
-
-pub fn slurmrestd(comptime T: type, allocator: std.mem.Allocator) !Parsed(T) {
-    var client = std.http.Client{ .allocator = allocator };
-    defer client.deinit();
-
-    var body = std.Io.Writer.Allocating.init(allocator);
-    defer body.deinit();
-
-    const jwt = try std.process.getEnvVarOwned(allocator, "SLURM_JWT");
-
-    const response = try client.fetch(.{
-        .extra_headers = &.{
-            .{ .name = "X-SLURM-USER-NAME", .value = "root" },
-            .{ .name = "X-SLURM-USER-TOKEN", .value = jwt },
-        },
-        .method = .GET,
-        .response_writer = &body.writer,
-        .location = .{ .url = uri ++ "/" ++ plugin ++ "/" ++ T.endpoint },
-//      .headers = .{
-//          .accept_encoding = .{ .override = "application/json" },
-//      },
-    });
-
-    if (response.status != .ok) {
-        @panic("TODO: handle errors");
-    }
-
-    return parse(T, allocator, body.written());
-
-//  var scanner = std.json.Scanner.initCompleteInput(allocator, body.written());
-//  defer scanner.deinit();
-//  var jd = std.json.Diagnostics{};
-//  scanner.enableDiagnostics(&jd);
-//  const parsed = std.json.parseFromTokenSource(T, allocator, &scanner, .{
-//      .allocate = .alloc_always,
-//      .parse_numbers = true,
-//      .ignore_unknown_fields = true,
-//  }) catch |err| {
-//      std.debug.print("{s}\n", .{body.written()});
-//      std.debug.print("{any} on line {d}\n", .{err, jd.line_number});
-//      return err;
-//  };
 }
