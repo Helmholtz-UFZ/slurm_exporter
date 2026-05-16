@@ -89,7 +89,7 @@ pub fn collectSlurmrestd(self: *Queue, allocator: Allocator, options: Registry.B
 }
 
 pub fn collectCLI(self: *Queue, allocator: Allocator, options: Registry.Backend.CLIOptions) !void {
-    const resp = try cmd.runAndParse(json.JobsResponse, allocator, &.{ "squeue" }, options);
+    const resp = try cmd.runAndParse(json.JobsResponse, allocator, &.{ cli_command }, options);
     defer resp.deinit();
     try self.parseJson(allocator, resp.value.jobs);
 }

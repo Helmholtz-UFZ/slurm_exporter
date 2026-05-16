@@ -5,6 +5,15 @@ const json = @import("json.zig");
 const AllocatingWriter = std.Io.Writer.Allocating;
 const Registry = @import("Registry.zig");
 const CLIOptions = Registry.Backend.CLIOptions;
+const log = std.log.scoped(.cmd);
+
+fn handleSpawnError(err: anytype, command: []const u8) !void {
+    switch (err) {
+        error.FileNotFound => log.err("Required Command {s} not found", .{command}),
+        else => log.err("Unexpected failure executing {s}: {s}", .{command, @errorName(err)}),
+    }
+    return err;
+}
 
 pub fn run(allocator: std.mem.Allocator, argv: []const []const u8) !AllocatingWriter {
     var buf: [1024]u8 = undefined;
@@ -14,7 +23,8 @@ pub fn run(allocator: std.mem.Allocator, argv: []const []const u8) !AllocatingWr
     command.stderr_behavior = .Pipe;
     command.stdout_behavior = .Pipe;
 
-    try command.spawn();
+    command.spawn() catch |err| try handleSpawnError(err, argv[0]);
+
     const stdout = command.stdout.?;
     var stdout_reader = stdout.reader(&buf);
     var reader = &stdout_reader.interface;
@@ -23,7 +33,7 @@ pub fn run(allocator: std.mem.Allocator, argv: []const []const u8) !AllocatingWr
     errdefer line_writer.deinit();
 
     _ = try reader.streamRemaining(&line_writer.writer);
-    _ = try command.wait();
+    _ = command.wait() catch |err| try handleSpawnError(err, argv[0]);
 
     return line_writer;
 }

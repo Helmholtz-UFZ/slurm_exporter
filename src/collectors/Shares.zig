@@ -111,7 +111,7 @@ pub fn collectCLI(self: *Shares, allocator: Allocator, options: Registry.Backend
     const resp = try cmd.runAndParse(
         json.SharesResponse,
         allocator,
-        &.{ "sshare" },
+        &.{ cli_command },
         options,
 
     );

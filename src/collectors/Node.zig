@@ -102,7 +102,7 @@ pub fn collectCLI(self: *Node, arena: Allocator, options: Registry.Backend.CLIOp
     const resp = try cmd.runAndParse(
         json.NodesReponse,
         arena,
-        &.{ "scontrol", "show", "nodes" },
+        &.{ cli_command, "show", "nodes" },
         options,
     );
     defer resp.deinit();

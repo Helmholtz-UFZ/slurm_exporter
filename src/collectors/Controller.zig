@@ -304,7 +304,7 @@ pub fn collectCLI(self: *Controller, allocator: Allocator, options: Registry.Bac
     const diag = try cmd.runAndParse(
         json.DiagResponse,
         allocator,
-        &.{ "sdiag" },
+        &.{ cli_command },
         options,
     );
     defer diag.deinit();

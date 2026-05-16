@@ -13,6 +13,9 @@ const config = @import("config");
 const json = @import("json.zig");
 const cmd = @import("cmd.zig");
 const allocPrint = std.fmt.allocPrint;
+const util = @import("util.zig");
+const exit = util.exit;
+const typeNameLower = util.typeNameLower;
 
 pub const Backend = enum {
     libslurm,
@@ -26,7 +29,7 @@ pub const Backend = enum {
     pub const SlurmrestdOptions = struct {
         address: []const u8 = "127.0.0.1:6820",
         plugin: json.PluginType = .@"v0.0.44",
-        endpoint: ?[]const u8 = null,
+        base_path: []const u8 = "/",
         jwt_file_path: ?[]const u8 = null,
         tls: bool = false,
 
@@ -34,30 +37,50 @@ pub const Backend = enum {
         jwt: ?[]const u8 = null,
         uri: ?std.Uri = null,
 
-        fn getJWT(arena: std.mem.Allocator) ![]const u8 {
-            if (!std.process.hasEnvVarConstant("SLURM_JWT")) {
-                log.err("Unable to get SLURM_JWT env var", .{});
-                std.process.exit(1);
-            }
-            const jwt = try std.process.getEnvVarOwned(arena, "SLURM_JWT");
+        fn getJWT(self: *SlurmrestdOptions, arena: std.mem.Allocator) ![]const u8 {
+            const jwt = if (self.jwt_file_path) |jwt_file_path| blk: {
+                if (!std.fs.path.isAbsolute(jwt_file_path)) {
+                    exit(log.err, "Invalid File Path: {s}", .{jwt_file_path});
+                }
+
+                var file = std.fs.openFileAbsolute(jwt_file_path, .{ .mode = .read_only }) catch |err| {
+                    exit(log.err, "Cannot read file {s}: {s}", .{jwt_file_path, @errorName(err)});
+                };
+
+                var read_buf: [4096]u8 = undefined;
+                var reader = file.reader(&read_buf);
+
+                var line: std.Io.Writer.Allocating = .init(arena);
+                defer line.deinit();
+
+                _ = reader.interface.streamDelimiter(&line.writer, '\n') catch |err| {
+                    exit(log.err, "Error reading JWT from File {s}: {s}", .{jwt_file_path, @errorName(err)});
+                };
+
+                break :blk try arena.dupe(u8, line.written());
+            } else blk: {
+                const envar = std.process.getEnvVarOwned(arena, "SLURM_JWT") catch |err| {
+                    exit(log.err, "Couldn't get SLURM_JWT env var: {s}", .{@errorName(err)});
+                };
+                break :blk envar;
+            };
             return jwt;
         }
 
         fn parseURI(self: *SlurmrestdOptions, arena: std.mem.Allocator) !std.Uri {
-            const endpoint = if (self.endpoint) |e|
-                try allocPrint(arena, "/{s}", .{e})
-            else
-                "";
-
+            if (!std.mem.startsWith(u8, self.base_path, "/")) {
+                exit(log.err, "base-path must start with /", .{});
+            }
             const protocol = if (self.tls) "https" else "http";
-
-            const url = try allocPrint(arena, "{s}://{s}{s}/slurm/{s}", .{
+            const addr = std.net.Address.parseIpAndPort(self.address) catch |err| {
+                exit(log.err, "Failed to parse address {s}: {s}", .{self.address, @errorName(err)});
+            };
+            const url = try allocPrint(arena, "{s}://{f}{s}/slurm/{s}", .{
                 protocol,
-                self.address,
-                endpoint,
+                addr,
+                self.base_path,
                 @tagName(self.plugin),
             });
-
             return .parse(url);
         }
 
@@ -65,7 +88,7 @@ pub const Backend = enum {
             self.uri = try self.parseURI(arena);
             log.info("Base URI for slurmrestd is: {f}", .{self.uri.?});
 
-            self.jwt = try getJWT(arena);
+            self.jwt = try self.getJWT(arena);
         }
     };
 
@@ -76,14 +99,6 @@ pub const Backend = enum {
     };
 };
 
-pub fn typeNameLower(comptime T: type) []const u8 {
-    var iter = std.mem.splitBackwardsScalar(u8, @typeName(T), '.');
-    const name = iter.first();
-    var buf: [name.len]u8 = undefined;
-    const result = std.ascii.lowerString(&buf, name);
-    return result;
-}
-
 pub const Collector = union(enum) {
     node: Node,
     controller: Controller,
@@ -91,6 +106,12 @@ pub const Collector = union(enum) {
     queue: Queue,
 
     pub const fields = std.meta.fields(Collector);
+
+    pub fn name(self: Collector) []const u8 {
+        switch (self) {
+            inline else => |v| return typeNameLower(@TypeOf(v)),
+        }
+    }
 
     pub fn init(self: Collector, arena: std.mem.Allocator) !Collector {
         switch (self) {
@@ -114,22 +135,6 @@ pub const Collector = union(enum) {
     pub fn write(self: Collector, writer: *std.Io.Writer) !void {
         switch (self) {
             inline else => |v| return m.write(&v, writer),
-        }
-    }
-
-    pub fn checkCLICommand(self: Collector, arena: std.mem.Allocator) !void {
-        switch (self) {
-            inline else => |v| {
-                const T = @TypeOf(v);
-                // TODO: check if the commands actually support the --json flag
-                _ = cmd.run(arena, &.{ T.cli_command, "--help" }) catch |e| switch(e) {
-                    error.FileNotFound => {
-                        log.err("Required command {s} was not found for {s}", .{T.cli_command, @typeName(T)});
-                        std.process.exit(1);
-                    },
-                    else => return e,
-                };
-            },
         }
     }
 };
@@ -156,7 +161,20 @@ const opts: m.RegistryOpts = .{
 enabled_collectors: std.ArrayList(Collector) = .empty,
 backend_options: Backend.Options,
 backend: Backend,
-//slurmrestd_options: json.SlurmrestdOptions,
+
+pub fn validateCLICommands(self: *Registry, arena: std.mem.Allocator) !void {
+    for (self.enabled_collectors.items) |collector| {
+        switch (collector) {
+            inline else => |v| {
+                const T = @TypeOf(v);
+                // TODO: check if the commands actually support the --json flag
+                _ = cmd.run(arena, &.{ T.cli_command, "--help" }) catch {
+                    std.process.exit(1);
+                };
+            },
+        }
+    }
+}
 
 pub fn register(self: *Registry, allocator: std.mem.Allocator, names: []const u8, stdout: bool) !void {
     const names_lower = try std.ascii.allocLowerString(allocator, names);
@@ -179,9 +197,7 @@ pub fn register(self: *Registry, allocator: std.mem.Allocator, names: []const u8
     }
 
     if (self.backend == .cli and config.backends.cli) {
-        for (self.enabled_collectors.items) |c| {
-            try c.checkCLICommand(allocator);
-        }
+        try self.validateCLICommands(allocator);
     }
 
     if (self.backend == .slurmrestd and config.backends.slurmrestd) {
@@ -197,7 +213,10 @@ pub fn collect(self: *Registry, arena: std.mem.Allocator) !CollectionResult {
     var result: CollectionResult = .{};
     for (self.enabled_collectors.items) |item| {
         var collector: Collector = try .init(item, arena);
-        try collector.collect(arena, self.backend, self.backend_options);
+        collector.collect(arena, self.backend, self.backend_options) catch {
+            log.err("Collect failed for '{s}'", .{collector.name()});
+            continue;
+        };
         try result.append(arena, collector);
     }
     return result;

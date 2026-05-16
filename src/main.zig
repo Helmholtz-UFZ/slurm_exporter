@@ -3,7 +3,7 @@
 
 const std = @import("std");
 const slurm = @import("slurm");
-const cli = @import("cli");
+const cli = @import("cli.zig");
 const Allocator = std.mem.Allocator;
 const Registry = @import("Registry.zig");
 const httpz = @import("httpz");
@@ -11,7 +11,6 @@ const build_meta = @import("build.zig.zon");
 const log = std.log.scoped(.main);
 const config = @import("config");
 const json = @import("json.zig");
-const comptimePrint = std.fmt.comptimePrint;
 
 pub const std_options: std.Options = .{
     .logFn = logFn,
@@ -19,37 +18,9 @@ pub const std_options: std.Options = .{
 
 var rt: Runtime = undefined;
 var registry: Registry = undefined;
-const default_backend: Registry.Backend = if (config.backends.libslurm)
-    .libslurm
-else if (config.backends.cli)
-    .cli
-else
-    .slurmrestd;
-
-const CliOptions = struct {
-    collectors: []const u8 = "node,controller,shares,queue",
-    web_listen_address: []const u8 = "127.0.0.1:5882",
-    web_telemetry_path: []const u8 = "/metrics",
-    version_info: bool = false,
-    stdout: bool = false,
-    backend: Registry.Backend = default_backend,
-    list_backends: bool = false,
-    backend_slurmrestd_options: Registry.Backend.SlurmrestdOptions = .{},
-    backend_cli_options: Registry.Backend.CLIOptions = .{},
-
-    pub const BackendCLIOptions = struct {
-        plugin: json.PluginType = .@"v0.0.44",
-    };
-
-    pub const BackendSlurmrestdOptions = struct {
-        address: []const u8 = "127.0.0.1:6820",
-        plugin: json.PluginType = .@"v0.0.44",
-    };
-};
-
 pub const Runtime = struct {
     allocator: Allocator,
-    cli_args: CliOptions = .{},
+    cli_args: cli.Arguments = .{},
 
     pub fn init(allocator: Allocator) !Runtime {
         if (config.backends.libslurm) slurm.init(null);
@@ -60,101 +31,11 @@ pub const Runtime = struct {
 };
 
 pub fn main() !void {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    var arena: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
     defer arena.deinit();
-    const allocator = arena.allocator();
 
-    rt = try .init(allocator);
-
-    var r: cli.AppRunner = try .init(rt.allocator);
-    const default_cli_options: CliOptions = .{};
-
-    var options: std.ArrayList(cli.Option) = .empty;
-    defer options.deinit(rt.allocator);
-
-    const base_cli_options: []const cli.Option = &.{
-        .{
-            .long_name = "collectors.enable",
-            .help =
-                \\Which Collectors to enable. All are enabled by default
-                \\Available:
-                ++ " " ++ default_cli_options.collectors
-                ,
-            .value_ref = r.mkRef(&rt.cli_args.collectors),
-        },
-        .{
-            .long_name = "web.listen-address",
-            .help = "Host and Port to listen on. Default is " ++ default_cli_options.web_listen_address,
-            .value_ref = r.mkRef(&rt.cli_args.web_listen_address),
-        },
-        .{
-            .long_name = "web.telemetry-path",
-            .help = "Path under which the metrics should be exposed. Default is " ++ default_cli_options.web_telemetry_path,
-            .value_ref = r.mkRef(&rt.cli_args.web_telemetry_path),
-        },
-        .{
-            .long_name = "version",
-            .short_alias = 'v',
-            .help = "Show application version",
-            .value_ref = r.mkRef(&rt.cli_args.version_info),
-        },
-        .{
-            .long_name = "stdout",
-            .help = "Collect metrics once, print to stdout and exit. Default is " ++ comptimePrint("{}", .{default_cli_options.stdout}),
-            .value_ref = r.mkRef(&rt.cli_args.stdout),
-        },
-        .{
-            .long_name = "collectors.backend",
-            .help = "From which API the Metrics should be gathered. Default is " ++ @tagName(default_backend),
-            .value_ref = r.mkRef(&rt.cli_args.backend),
-        },
-        .{
-            .long_name = "list-backends",
-            .help = "Show available Backends that can be used.",
-            .value_ref = r.mkRef(&rt.cli_args.list_backends),
-        },
-    };
-
-    try options.appendSlice(rt.allocator, base_cli_options);
-    if (config.backends.slurmrestd) {
-        const backend_slurmrestd_options: []const cli.Option = &.{
-            .{
-                .long_name = "backend.slurmrestd.address",
-                .help = "Address for contacting the slurmrestd",
-                .value_ref = r.mkRef(&rt.cli_args.backend_slurmrestd_options.address),
-            },
-            .{
-                .long_name = "backend.slurmrestd.data_parser",
-                .help = "Which data parser plugin to use",
-                .value_ref = r.mkRef(&rt.cli_args.backend_slurmrestd_options.plugin),
-            },
-        };
-        try options.appendSlice(rt.allocator, backend_slurmrestd_options);
-    }
-
-    if (config.backends.cli) {
-        const backend_cli_options: []const cli.Option = &.{
-            .{
-                .long_name = "backend.cli.data_parser",
-                .help = "Address for contacting the slurmrestd",
-                .value_ref = r.mkRef(&rt.cli_args.backend_cli_options.plugin),
-            },
-        };
-        try options.appendSlice(rt.allocator, backend_cli_options);
-    }
-
-    const app = cli.App{
-        .command = cli.Command{
-            .name = "slurm-exporter",
-            .options = try r.allocOptions(try options.toOwnedSlice(rt.allocator)),
-            .target = cli.CommandTarget{
-                .action = cli.CommandAction{ .exec = run },
-            },
-        },
-        .version = build_meta.version,
-    };
-
-    return r.run(&app);
+    rt = try .init(arena.allocator());
+    return cli.run(rt.allocator, &rt.cli_args, run);
 }
 
 pub fn validateBackend() void {
@@ -163,7 +44,7 @@ pub fn validateBackend() void {
         if (std.mem.eql(u8, field.name, backend)) {
             const is_enabled = @field(config.backends, field.name);
             if (!is_enabled) {
-                log.err("slurm-exporter is not compiled with {s} capabilites", .{backend});
+                log.err("{s} is not compiled with {s} capabilites", .{cli.app_name, backend});
                 log.err("Use a different backend, or recompile with -Dbackends={s}", .{backend});
                 std.process.exit(1);
             }
@@ -238,11 +119,7 @@ pub fn logFn(
     comptime format: []const u8,
     log_args: anytype,
 ) void {
-    const scope_name = switch (scope) {
-        .main, .registry => @tagName(scope),
-        else => return,
-    };
-
+    const scope_name = @tagName(scope);
     const level_prefix = comptime level.asText();
     const scope_prefix = if (scope == .default) ": " else "(" ++ scope_name ++ "): ";
 

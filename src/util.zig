@@ -11,6 +11,20 @@ pub fn microToSeconds(comptime T: type, value: u64) T {
     return @as(T, @floatFromInt(value)) / MICROSECONDS;
 }
 
+pub fn exit(logFn: anytype, comptime fmt: []const u8, args: anytype) noreturn {
+    defer std.process.exit(1);
+    logFn(fmt, args);
+}
+
+pub fn typeNameLower(comptime T: type) []const u8 {
+    const orig = @typeName(T);
+    var iter = std.mem.splitBackwardsScalar(u8, orig, '.');
+    const name = iter.first();
+    var buf: [orig.len]u8 = undefined;
+    const result = std.ascii.lowerString(&buf, name);
+    return result;
+}
+
 pub fn uidToName(allocator: Allocator, uid: std.posix.uid_t) ![:0]const u8 {
     //  if (job.user_name) |uname| {
     //      return std.mem.span(uname);
